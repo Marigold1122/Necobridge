@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>disable</ImplicitUsings><Nullable>enable</Nullable><NoWarn>CA1416;WFO0003</NoWarn><ApplicationManifest>../../src/NekoBridge.Windows/app.manifest</ApplicationManifest></PropertyGroup>
+<ItemGroup><ProjectReference Include="../../src/NekoBridge.Core/NekoBridge.Core.csproj"/><Compile Include="../../src/NekoBridge.Windows/DragDrop/*.cs" Link="DragDrop/%(Filename)%(Extension)"/><Compile Include="../../src/NekoBridge.Windows/Input/*.cs" Link="Input/%(Filename)%(Extension)"/></ItemGroup>
+</Project>
