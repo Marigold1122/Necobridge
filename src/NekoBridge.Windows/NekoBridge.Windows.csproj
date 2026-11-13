@@ -9,7 +9,7 @@
     <AssemblyName>NekoBridge</AssemblyName>
     <RootNamespace>NekoBridge.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.3.19</Version>
+    <Version>1.00</Version>
     <!-- WPF owns startup; process DPI awareness is declared in app.manifest. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <ApplicationIcon>Assets/nekobridge.ico</ApplicationIcon>
