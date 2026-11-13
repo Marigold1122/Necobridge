@@ -13,7 +13,7 @@ public partial class MainWindow
         if(_quitting)return;
         try
         {
-            _historyWindow??=new HistoryWindow(_historyStore,_historyBridge,_state.Settings,_state.Save,SetHistoryHotkey,_lifetime.Token);
+            _historyWindow??=new HistoryWindow(_historyStore,_historyBridge,ClipboardSettings,_lifetime.Token);
             if(_historyWindow.IsWorking)return;
             if(_historyWindow.IsVisible&&!settings){_historyWindow.Hide();return;}
             await _historyWindow.OpenAsync(settings);
@@ -29,5 +29,4 @@ public partial class MainWindow
         catch{_state.Settings.ClipboardHistoryHotkey=previous;_historyHotkey.Set(previous);throw;}
         return Task.CompletedTask;
     }
-    private async void HistorySettings_Click(object sender,RoutedEventArgs e)=>await OpenClipboardHistory(true);
 }

@@ -12,11 +12,11 @@ public partial class HistoryWindow:Window
     private readonly HistoryViewModel _model;
     private bool _dialog;
     internal bool IsWorking=>_model.Busy;
-    internal HistoryWindow(HistoryStore store,HistoryBridge bridge,NekoBridge.Core.AppSettings settings,Action persist,Func<string,Task> setHotkey,System.Threading.CancellationToken lifetime)
+    internal HistoryWindow(HistoryStore store,HistoryBridge bridge,ClipboardSettingsModel clipboardSettings,System.Threading.CancellationToken lifetime)
     {
         InitializeComponent();
         _=new HistoryWheelScroll(ClipList);
-        _model=new HistoryViewModel(store,bridge,settings,persist,setHotkey,Finish,Error,Confirm,lifetime);
+        _model=new HistoryViewModel(store,bridge,clipboardSettings,Finish,Error,Confirm,lifetime);
         Closing+=(_,args)=>{if(!lifetime.IsCancellationRequested){args.Cancel=true;Hide();}};
         DataContext=_model;
     }

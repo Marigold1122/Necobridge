@@ -37,12 +37,24 @@ internal sealed class CursorParking : IDisposable
     }
     private void Apply(long generation)
     {
+        bool visible;int x,y;
         lock(_gate)
         {
             if(generation!=_generation)return;
             if(_disposed){Forms.Application.ExitThread();return;}
-            if(_visible)_window!.ShowAt(_x,_y);else _window!.Hide();
+            visible=_visible;x=_x;y=_y;
         }
+        // SendInput may wait for the hook; never hold _gate while injecting.
+        if(visible)
+        {
+            try{_window!.ShowAt(x,y);}
+            catch(System.ComponentModel.Win32Exception ex)
+            {
+                _window!.Hide();
+                _log($"光标停放失败：{ex.Message}");
+            }
+        }
+        else _window!.Hide();
     }
     private void Run()
     {
@@ -74,7 +86,15 @@ internal sealed class CursorParking : IDisposable
         {
             if(!SetWindowPos(Handle,new nint(-1),x-1,y,3,3,0x0050))
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-            SetCursor(0);
+            // The initial move can precede this asynchronous window. Replay a
+            // zero-distance move only while still parked to refresh hit testing
+            // without pulling the cursor back after a rapid return/remote enter.
+            if(NativeMethods.GetCursorPos(out var point)
+                && point.X>=x-1&&point.X<x+2&&point.Y>=y&&point.Y<y+3)
+            {
+                NativeMethods.InjectMouse(0,0,1);
+                SetCursor(0);
+            }
         }
         internal void Hide()
         {

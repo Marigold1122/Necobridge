@@ -42,6 +42,16 @@ foreach(string kind in new[]{"move","button","key","emergency"})
     if(InputRouter.IsReceiverReplay(replay,false))throw new Exception($"Controller driver input rejected: {kind}");
     if(InputRouter.IsReceiverReplay(new PhysicalInput(kind),true))throw new Exception($"Physical local takeover rejected: {kind}");
 }
+if(InputRouter.ShouldRecoverRawRelease(false))throw new Exception("Local physical UP must not be replayed");
+if(!InputRouter.ShouldRecoverRawRelease(true))throw new Exception("Remote raw release recovery lost");
+foreach(string kind in new[]{"move","key","wheel","button"})
+{
+    if(!InputRouter.IsLocalTakeover(new PhysicalInput(kind),true))throw new Exception("Physical takeover missing: "+kind);
+    if(InputRouter.IsLocalTakeover(new PhysicalInput(kind,SourceInjected:true),true))throw new Exception("Software replay stole ownership");
+    if(InputRouter.IsLocalTakeover(new PhysicalInput(kind),false))throw new Exception("No owner to take over");
+}
+if(InputRouter.IsLocalTakeover(new PhysicalInput("button",Flags:1),true))throw new Exception("Release-only event stole ownership");
+Console.WriteLine("PASS local raw UP not replayed, remote release recovery retained, physical move/click/wheel takeover");
 Console.WriteLine("PASS receiver software replay preserves remote ownership; controller injections and real local takeover retained");
 Console.WriteLine("PASS driver injections accepted; NekoBridge self-injection excluded");
 Console.WriteLine("InputSmoke passed: MWB default absolute mapping, axis independence, bidirectional resolutions, fractional accumulation. No physical input exercised.");

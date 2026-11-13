@@ -4,6 +4,8 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using NekoBridge.Core;
 
+if (args.Contains("--layout-only")) { LayoutSmoke.Run(); return 0; }
+
 string root = Path.Combine(Path.GetTempPath(), "NekoBridge-CoreSmoke-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 try

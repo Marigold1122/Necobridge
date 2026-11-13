@@ -83,6 +83,11 @@ internal sealed class InputRouter : IDisposable
     internal static bool IsReceiverReplay(PhysicalInput input,bool hasRemoteOwner)
         => hasRemoteOwner && input.SourceInjected;
 
+    internal static bool IsLocalTakeover(PhysicalInput input,bool hasRemoteOwner)
+        => hasRemoteOwner&&!input.SourceInjected
+           &&(input.Kind is "move" or "key" or "wheel" || input.Kind=="button"&&input.Flags==0);
+    internal static bool ShouldRecoverRawRelease(bool forwardingToRemote)=>forwardingToRemote;
+
     private bool HandlePhysical(PhysicalInput e)
     {
         lock(_gate)
@@ -90,10 +95,11 @@ internal sealed class InputRouter : IDisposable
             if(_disposed)return false;
             if(e.Kind=="rawButtonUp")
             {
+                // Local Windows already receives the physical UP. Replaying it
+                // from Raw Input duplicates releases and can dismiss tray flyouts.
+                if(!ShouldRecoverRawRelease(_active!=_node.LocalId))return false;
                 if(!_physicalButtons.Contains(e.Data))return false;
-                // Raw Input can arrive before or after LL UP; the held set deduplicates both.
                 e=e with {Kind="button"};
-                if(_active==_node.LocalId&&_owner==Guid.Empty)InjectButton(e.Data,true);
             }
             // Receiver-side gesture tools may replay our input with a different marker.
             if(IsReceiverReplay(e,_owner!=Guid.Empty))
@@ -109,6 +115,19 @@ internal sealed class InputRouter : IDisposable
             {
                 _leftDown=false;ReturnLocalLocked();ReleaseReceivedLocked();_owner=Guid.Empty;
                 EmergencyReturned?.Invoke();return false;
+            }
+            if(!_paused&&IsLocalTakeover(e,_owner!=Guid.Empty))
+            {
+                var owner=_owner;_owner=Guid.Empty;
+                RestoreParking();
+                Queue(owner,new ControlMessage{Kind="yield"});
+                CancelDragRequested?.Invoke();
+                // The physical DOWN already establishes this button's state;
+                // injecting a remote UP here would cancel that very first click.
+                if(e.Kind=="button"&&e.Flags==0)_receivedButtons.Remove(e.Data);
+                if(e.Kind=="key"&&(e.Flags&1)==0)_receivedKeys.Remove(e.X);
+                ReleaseReceivedLocked();
+                ActiveChanged?.Invoke(_node.LocalId);
             }
             if(e.Kind=="key")
             {
@@ -127,15 +146,6 @@ internal sealed class InputRouter : IDisposable
             }
             if(_paused)return false;
             if(_parkController!=Guid.Empty && !e.SourceInjected)RestoreParking();
-            if(_owner!=Guid.Empty)
-            {
-                if(e.Kind=="move" || e.Kind=="key" || (e.Kind=="button"&&e.Flags==0))
-                {
-                    Queue(_owner,new ControlMessage{Kind="yield"});
-                    CancelDragRequested?.Invoke();ReleaseReceivedLocked();_owner=Guid.Empty;
-                }
-                if(_owner!=Guid.Empty)return false;
-            }
             if(_dragStarting&&e.Kind=="move")return true;
             if(_active==_node.LocalId)
             {
@@ -312,8 +322,7 @@ internal sealed class InputRouter : IDisposable
                 case "keepalive":break;
                 case "leave":
                     CancelDragRequested?.Invoke();ReleaseReceivedLocked();_owner=Guid.Empty;
-                    if(m.Flags==1){_parkController=peer;_parkHeartbeat=DateTime.UtcNow;ParkCursor();}
-                    else RestoreParking();
+                    _parkController=peer;_parkHeartbeat=DateTime.UtcNow;ParkCursor();
                     break;
                 case "move":NativeMethods.MoveCursor(Left+Math.Clamp(m.X,0,Width-1),Top+Math.Clamp(m.Y,0,Height-1));break;
                 case "key":
@@ -362,7 +371,7 @@ internal sealed class InputRouter : IDisposable
             if(_disposed)return;
             FlushMoveLocked();
             long now=Environment.TickCount64;
-            if(_active!=_node.LocalId&&now-_lastKeepAlive>400)
+            if(!_paused&&now-_lastKeepAlive>400)
             {
                 foreach(var peer in _node.Peers.Where(p=>p.IsConnected))Queue(peer.Id,new ControlMessage{Kind="keepalive"});
                 _lastKeepAlive=now;

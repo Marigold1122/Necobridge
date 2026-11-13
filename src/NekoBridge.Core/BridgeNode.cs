@@ -141,8 +141,12 @@ public sealed partial class BridgeNode : IAsyncDisposable
             existing ??= new PeerSettings { Id = device.Id, Fingerprint = fp };
             existing.Name = CleanName(device.Name); existing.Host = host; existing.Port = port; existing.Width = device.Width; existing.Height = device.Height;
             if (!settings.Peers.Contains(existing)) settings.Peers.Add(existing);
-            if (!settings.Layout.Contains(LocalId)) settings.Layout.Add(LocalId);
-            if (!settings.Layout.Contains(device.Id)) settings.Layout.Add(device.Id);
+            // A versioned shared record must only change together with its Lamport stamp.
+            if (settings.LayoutRevision == 0)
+            {
+                if (!settings.Layout.Contains(LocalId)) settings.Layout.Add(LocalId);
+                if (!settings.Layout.Contains(device.Id)) settings.Layout.Add(device.Id);
+            }
             try { persist(); }
             catch { settings.Peers = previousPeers; settings.Layout = previousLayout; throw; }
             if (!peerLifetimes.ContainsKey(device.Id)) peerLifetimes[device.Id] = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
@@ -317,14 +321,14 @@ public sealed partial class BridgeNode : IAsyncDisposable
         {
             if (connections.Remove(peerId, out var connection)) connection.Dispose();
             if (peerLifetimes.Remove(peerId, out var cts)) { cts.Cancel(); cts.Dispose(); }
-            if (forget) { settings.Peers.RemoveAll(p => p.Id == peerId); settings.Layout.RemoveAll(id => id == peerId); persist(); }
+            if (forget) { settings.Peers.RemoveAll(p => p.Id == peerId); if (settings.LayoutRevision == 0) settings.Layout.RemoveAll(id => id == peerId); persist(); }
             foreach (var id in offers.Where(p => p.Value.Recipient == peerId || p.Value.SourcePeer == peerId).Select(p => p.Key).ToArray()) offers.Remove(id);
         }
         Changed();
     }
     private static void ValidateMessage(ControlMessage message)
     {
-        if (message.Kind is not ("enter" or "leave" or "move" or "button" or "wheel" or "key" or "keepalive" or "yield" or "clipboard" or "capture" or "dragoffer" or "dragready" or "capture2" or "captured2" or "prepare2" or "commit2" or "started2" or "release2" or "released2" or "abort2" or "dragcancel" or "manualoffer" or "manualdone")) throw new InvalidDataException("未知控制事件。");
+        if (message.Kind is not ("enter" or "leave" or "move" or "button" or "wheel" or "key" or "keepalive" or "yield" or "clipboard" or "capture" or "dragoffer" or "dragready" or "capture2" or "captured2" or "prepare2" or "commit2" or "started2" or "release2" or "released2" or "abort2" or "dragcancel" or "manualoffer" or "manualdone" or "layout")) throw new InvalidDataException("未知控制事件。");
         if (message.Text?.Length > 512000 || message.Payload?.Length > 512000) throw new InvalidDataException("控制消息过大。");
     }
     private static void ValidateDevice(DeviceDescriptor d)

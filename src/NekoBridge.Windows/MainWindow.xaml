@@ -158,7 +158,7 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Image Source="/NekoBridge;component/Assets/logo.png" Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock Text="NekoBridge" Margin="8,0,0,0" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
-                    <TextBlock Text="0.3.11 重建" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
+                    <TextBlock Text="0.3.19" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="32,0,0,0" VerticalAlignment="Center">
                     <Ellipse x:Name="StateDot" Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Muted}"/>
@@ -218,8 +218,8 @@
                     </Border>
                 </Border>
                 <StackPanel Grid.Row="1" AutomationProperties.Name="导航">
-                    <RadioButton x:Name="NavConn" AutomationProperties.AutomationId="NavConn" Style="{StaticResource NavItem}" Tag="01" Content="连接" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavArr" AutomationProperties.AutomationId="NavArr" Style="{StaticResource NavItem}" Tag="02" Content="屏幕排列" Checked="Nav_Checked" IsChecked="True"/>
+                    <RadioButton x:Name="NavConn" AutomationProperties.AutomationId="NavConn" Style="{StaticResource NavItem}" Tag="01" Content="连接" Checked="Nav_Checked" IsChecked="True"/>
+                    <RadioButton x:Name="NavArr" AutomationProperties.AutomationId="NavArr" Style="{StaticResource NavItem}" Tag="02" Content="屏幕排列" Checked="Nav_Checked"/>
                     <RadioButton x:Name="NavSet" AutomationProperties.AutomationId="NavSet" Style="{StaticResource NavItem}" Tag="03" Content="设置" Checked="Nav_Checked"/>
                 </StackPanel>
                 <StackPanel Grid.Row="3" Margin="24,0,24,24">
@@ -231,7 +231,7 @@
         </Grid>
 
         <!-- 主区：统一容器，左对齐轴 32，最大宽 960 -->
-        <Grid Grid.Row="1" Grid.Column="1" Margin="32,24,32,24" MaxWidth="960" HorizontalAlignment="Stretch">
+        <Grid x:Name="MainContent" Grid.Row="1" Grid.Column="1" Margin="32,24,32,24" HorizontalAlignment="Stretch">
             <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
                 <TextBlock x:Name="PageNum" Text="02" Style="{StaticResource Mono}" Foreground="{DynamicResource LimeDeep}" FontSize="11"/>
@@ -239,37 +239,147 @@
                 <TextBlock x:Name="PageTitle" Text="屏幕排列" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
             </StackPanel>
 
-            <!-- 01 连接 -->
-            <ScrollViewer x:Name="PanelConn" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="5*" MinWidth="280"/><ColumnDefinition Width="32"/><ColumnDefinition Width="4*" MinWidth="240"/></Grid.ColumnDefinitions>
-                <Border BorderBrush="{DynamicResource Line}" BorderThickness="1" Padding="24" VerticalAlignment="Top" AutomationProperties.Name="连接状态">
-                    <StackPanel>
-                        <TextBlock x:Name="CardCode" Text="STATE / —" Style="{StaticResource Mono}" HorizontalAlignment="Left"/>
-                        <TextBlock x:Name="CardTitle" FontSize="24" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" Margin="0,8,0,8"/>
-                        <TextBlock x:Name="CardBody" Style="{StaticResource Caption}" FontSize="11.5" Foreground="{DynamicResource Ink70}"/>
-                        <TextBox x:Name="PairingCodeText" AutomationProperties.AutomationId="PairingCodeText" IsReadOnly="True" TextWrapping="Wrap" AutomationProperties.Name="本机安全配对密钥" Margin="0,16,0,0"/>
-                        <Button x:Name="CardAction" AutomationProperties.AutomationId="CardAction" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,24,0,0" Click="Pairing_Click"/>
-                    </StackPanel>
-                </Border>
-                <StackPanel Grid.Column="2">
-                    <TextBlock Text="设备" Style="{StaticResource Section}"/>
-                    <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1" Padding="0,8">
-                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                            <Rectangle Width="8" Height="8" Fill="{DynamicResource Lime}" Stroke="{DynamicResource Ink}" StrokeThickness="1" HorizontalAlignment="Left"/>
-                            <TextBlock x:Name="ConnHost" Grid.Column="1" FontSize="12" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Grid.Column="2" Text="本机" Style="{StaticResource Mono}"/></Grid>
-                    </Border>
-                    <ListBox x:Name="PeerList" AutomationProperties.AutomationId="PeerList" DisplayMemberPath="DisplayName" AutomationProperties.Name="已配对设备" Margin="0,8,0,0"/>
-                    <Button Style="{StaticResource Primary}" Content="移除选中设备" Click="RemovePeer_Click" Margin="0,8,0,0"/>
-                    <TextBlock Text="连接对方地址（IP:端口）" Style="{StaticResource Caption}" Margin="0,16,0,0"/>
-                    <TextBox x:Name="JoinAddress" AutomationProperties.AutomationId="JoinAddress" AutomationProperties.Name="对方地址"/>
-                    <TextBlock Text="对方的 40 字符安全密钥（已配对可留空）" Style="{StaticResource Caption}" Margin="0,8,0,0"/>
-                    <PasswordBox x:Name="JoinCode" AutomationProperties.AutomationId="JoinCode" AutomationProperties.Name="对方安全配对密钥"/>
-                    <Button x:Name="ConnectButton" AutomationProperties.AutomationId="ConnectButton" Style="{StaticResource Primary}" Content="连接" Click="Connect_Click" Margin="0,8,0,0"/>
-                    <Button x:Name="NearbyButton" AutomationProperties.AutomationId="NearbyButton" Style="{StaticResource Primary}" Content="发现局域网设备" Click="Discover_Click" Margin="0,8,0,0"/>
-                    <ListBox x:Name="NearbyList" AutomationProperties.AutomationId="NearbyList" DisplayMemberPath="Display" SelectionChanged="Nearby_SelectionChanged" AutomationProperties.Name="附近设备" Margin="0,8,0,0"/>
-                </StackPanel>
-            </Grid></ScrollViewer>
+            <!-- 01 连接：按已确认 HTML 移植，样式仅作用于连接页 -->
+            <Grid x:Name="PanelConn" Grid.Row="1" Visibility="Collapsed" TextElement.FontFamily="Microsoft YaHei" TextOptions.TextFormattingMode="Display">
+                <Grid.Resources>
+                    <Style x:Key="ConnectionButton" TargetType="Button">
+                        <Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="24,12"/>
+                        <Setter Property="FontSize" Value="15"/><Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter Property="Foreground" Value="White"/><Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+                        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                            <Border x:Name="Surface" Background="#1B2130" CornerRadius="12" Padding="{TemplateBinding Padding}" BorderThickness="2" BorderBrush="#1B2130">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="#343B48"/><Setter TargetName="Surface" Property="BorderBrush" Value="#343B48"/></Trigger>
+                                <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Background" Value="#101621"/></Trigger>
+                                <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.45"/></Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate></Setter.Value></Setter>
+                    </Style>
+                    <Style x:Key="ConnectionLink" TargetType="Button" BasedOn="{StaticResource ConnectionButton}">
+                        <Setter Property="Foreground" Value="{DynamicResource Ink70}"/><Setter Property="FontSize" Value="14"/><Setter Property="Padding" Value="12,10"/>
+                        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                            <Border x:Name="Surface" Background="Transparent" CornerRadius="10" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                            <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource Paper2}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
+                        </ControlTemplate></Setter.Value></Setter>
+                    </Style>
+                    <Style x:Key="ConnectionRole" TargetType="Button">
+                        <Setter Property="MinHeight" Value="210"/><Setter Property="Padding" Value="26"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/>
+                        <Setter Property="Background" Value="{DynamicResource Paper2}"/><Setter Property="BorderBrush" Value="#A9B394"/><Setter Property="Cursor" Value="Hand"/>
+                        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+                        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2" CornerRadius="22" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource LimeWash}"/><Setter TargetName="Surface" Property="BorderBrush" Value="#879571"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
+                        </ControlTemplate></Setter.Value></Setter>
+                    </Style>
+                    <Style x:Key="ConnectionCaption" TargetType="TextBlock"><Setter Property="FontSize" Value="14"/><Setter Property="LineHeight" Value="25"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="Foreground" Value="{DynamicResource Ink70}"/></Style>
+                    <Style x:Key="ConnectionHeading" TargetType="TextBlock"><Setter Property="FontSize" Value="26"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Margin" Value="0,0,0,18"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+                    <Style x:Key="ConnectionFieldLabel" TargetType="TextBlock" BasedOn="{StaticResource ConnectionCaption}"><Setter Property="FontSize" Value="12"/><Setter Property="Margin" Value="0,14,0,8"/></Style>
+                    <Style x:Key="ConnectionField" TargetType="Control"><Setter Property="FontSize" Value="15"/><Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="14,10"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Background" Value="{DynamicResource Paper}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Control"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2" CornerRadius="11" Padding="{TemplateBinding Padding}"><ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter></Style>
+                    <Style x:Key="ConnectionBall" TargetType="Border"><Setter Property="Width" Value="48"/><Setter Property="Height" Value="48"/><Setter Property="CornerRadius" Value="24"/><Setter Property="BorderThickness" Value="1"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Background" Value="{DynamicResource Paper}"/></Style>
+                    <Style x:Key="ConnectionNumber" TargetType="TextBlock"><Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="HorizontalAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/></Style>
+                    <Style x:Key="ConnectionInfo" TargetType="Border"><Setter Property="Padding" Value="22,18"/><Setter Property="CornerRadius" Value="14"/><Setter Property="Background" Value="{DynamicResource Paper2}"/></Style>
+                </Grid.Resources>
+                <ScrollViewer x:Name="ConnectionScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" SizeChanged="ConnectionScroll_SizeChanged">
+                    <Grid x:Name="ConnectionCanvas" Margin="12,0,12,12">
+                        <Grid x:Name="ConnectionIntro" VerticalAlignment="Center" Margin="24,32">
+                            <StackPanel>
+                                <TextBlock Text="NEKOBRIDGE / CONNECT" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LimeDeep}" Margin="0,0,0,24"/>
+                                <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" Margin="0,0,0,44"><TextBlock Text="这台主机是作为…" FontSize="52" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/></Viewbox>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <Button x:Name="ControllerRoleButton" AutomationProperties.AutomationId="ControllerRoleButton" Style="{StaticResource ConnectionRole}" Click="ControllerRole_Click" Background="{DynamicResource LimeWash}">
+                                        <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                            <TextBlock Text="01 / CONTROL" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LimeDeep}"/>
+                                            <Path Data="M3,3 H46 V31 H3 Z M17,40 H35 M25,31 V40 M50,28 H57 V42 H50 Z M53.5,28 V33" Stroke="{DynamicResource LimeDeep}" StrokeThickness="1.4" Width="56" Height="44" Stretch="Uniform" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                                            <TextBlock Grid.Row="1" Text="控制端" FontSize="30" FontWeight="SemiBold" Margin="0,38,0,10"/>
+                                            <TextBlock Grid.Row="2" Text="键鼠插在这台主机上" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Ink70}" Margin="0,0,32,0"/>
+                                            <TextBlock Grid.Row="2" Text="↗" FontSize="24" HorizontalAlignment="Right" Foreground="{DynamicResource LimeDeep}"/>
+                                        </Grid>
+                                    </Button>
+                                    <Button x:Name="ReceiverRoleButton" AutomationProperties.AutomationId="ReceiverRoleButton" Grid.Column="2" Style="{StaticResource ConnectionRole}" Click="ReceiverRole_Click">
+                                        <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                            <TextBlock Text="02 / RECEIVE" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LimeDeep}"/>
+                                            <Path Data="M11,3 H54 V32 H11 Z M24,41 H42 M33,32 V41 M2,17 H22 M16,11 L22,17 L16,23" Stroke="{DynamicResource LimeDeep}" StrokeThickness="1.4" Width="56" Height="44" Stretch="Uniform" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                                            <TextBlock Grid.Row="1" Text="被控端" FontSize="30" FontWeight="SemiBold" Margin="0,38,0,10"/>
+                                            <TextBlock Grid.Row="2" Text="使用另一台主机的键鼠" FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource Ink70}" Margin="0,0,32,0"/>
+                                            <TextBlock Grid.Row="2" Text="↗" FontSize="24" HorizontalAlignment="Right" Foreground="{DynamicResource LimeDeep}"/>
+                                        </Grid>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel x:Name="ConnectionSteps" Visibility="Collapsed" Margin="24,28">
+                            <Grid Margin="0,0,0,28"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <StackPanel><TextBlock x:Name="ConnectionRoleHint" FontSize="11" Foreground="{DynamicResource LimeDeep}" FontWeight="SemiBold" Margin="0,0,0,10"/><TextBlock x:Name="ConnectionFlowTitle" FontSize="32" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/></StackPanel>
+                                <Button x:Name="ChangeRoleButton" Grid.Column="1" Style="{StaticResource ConnectionLink}" Content="← 重新选择角色" VerticalAlignment="Top" Click="ChangeConnectionRole_Click"/>
+                            </Grid>
+                            <Border CornerRadius="20" Background="{DynamicResource Paper2}" Padding="10,22" Margin="0,0,0,32">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                    <Line Grid.ColumnSpan="2" X1="0" X2="1" Y1="0" Y2="0" Stretch="Fill" Stroke="#AAB09F" StrokeThickness="1" StrokeDashArray="3,4" VerticalAlignment="Top" Margin="70,24,70,0" IsHitTestVisible="False"/>
+                                    <Line Grid.Column="1" Grid.ColumnSpan="2" X1="0" X2="1" Y1="0" Y2="0" Stretch="Fill" Stroke="#AAB09F" StrokeThickness="1" StrokeDashArray="3,4" VerticalAlignment="Top" Margin="70,24,70,0" IsHitTestVisible="False"/>
+                                    <StackPanel><Border x:Name="ConnectionBallOne" Style="{StaticResource ConnectionBall}"><TextBlock x:Name="ConnectionNumberOne" Text="01" Style="{StaticResource ConnectionNumber}"/></Border><TextBlock x:Name="ConnectionLabelOne" Text="准备对方主机" FontSize="13" HorizontalAlignment="Center" Margin="0,14,0,0" Foreground="{DynamicResource Ink70}"/></StackPanel>
+                                    <StackPanel Grid.Column="1"><Border x:Name="ConnectionBallTwo" Style="{StaticResource ConnectionBall}"><TextBlock x:Name="ConnectionNumberTwo" Text="02" Style="{StaticResource ConnectionNumber}"/></Border><TextBlock x:Name="ConnectionLabelTwo" Text="填写连接信息" FontSize="13" HorizontalAlignment="Center" Margin="0,14,0,0" Foreground="{DynamicResource Ink70}"/></StackPanel>
+                                    <StackPanel Grid.Column="2"><Border x:Name="ConnectionBallThree" Style="{StaticResource ConnectionBall}"><TextBlock x:Name="ConnectionNumberThree" Text="03" Style="{StaticResource ConnectionNumber}"/></Border><TextBlock x:Name="ConnectionLabelThree" Text="连接完成" FontSize="13" HorizontalAlignment="Center" Margin="0,14,0,0" Foreground="{DynamicResource Ink70}"/></StackPanel>
+                                </Grid>
+                            </Border>
+                            <Grid x:Name="ConnectionWorkArea" MinHeight="260" Margin="12,0">
+                                <StackPanel x:Name="ConnectionStepOne">
+                                    <TextBlock x:Name="PrepareTitle" Style="{StaticResource ConnectionHeading}"/>
+                                    <TextBlock x:Name="PrepareBody" Style="{StaticResource ConnectionCaption}" Margin="0,0,0,26"/>
+                                    <Button x:Name="CardAction" AutomationProperties.AutomationId="CardAction" Style="{StaticResource ConnectionButton}" HorizontalAlignment="Left" Content="开启配对 →" Click="Pairing_Click"/>
+                                    <Button x:Name="PreparedButton" Style="{StaticResource ConnectionButton}" HorizontalAlignment="Left" Content="对方已开启，下一步 →" Click="Prepared_Click" Visibility="Collapsed"/>
+                                </StackPanel>
+                                <StackPanel x:Name="ConnectionStepTwo" Visibility="Collapsed">
+                                    <TextBlock x:Name="ConnectStepTitle" Style="{StaticResource ConnectionHeading}"/>
+                                    <StackPanel x:Name="ReceiverDetails" Visibility="Collapsed">
+                                        <TextBlock Text="回到控制端，填写下面的地址和安全密钥。" Style="{StaticResource ConnectionCaption}" Margin="0,0,0,20"/>
+                                        <Border Style="{StaticResource ConnectionInfo}" Margin="0,0,0,14"><StackPanel><TextBlock Text="本机地址" Style="{StaticResource ConnectionCaption}" FontSize="12"/><TextBlock x:Name="LocalPairingAddress" FontSize="17" Foreground="{DynamicResource Ink}" TextWrapping="Wrap" Margin="0,8,0,0"/></StackPanel></Border>
+                                        <Border Style="{StaticResource ConnectionInfo}"><StackPanel><TextBlock Text="安全密钥" Style="{StaticResource ConnectionCaption}" FontSize="12"/><TextBox x:Name="PairingCodeText" AutomationProperties.AutomationId="PairingCodeText" IsReadOnly="True" TextWrapping="Wrap" FontSize="17" Background="Transparent" BorderThickness="0" Padding="0,8,0,0" AutomationProperties.Name="本机安全配对密钥"><TextBox.Template><ControlTemplate TargetType="TextBox"><ScrollViewer x:Name="PART_ContentHost"/></ControlTemplate></TextBox.Template></TextBox></StackPanel></Border>
+                                        <TextBlock x:Name="PairingWaitText" Style="{StaticResource ConnectionCaption}" Foreground="{DynamicResource LimeDeep}" Margin="0,20,0,0"/>
+                                        <WrapPanel Margin="0,20,0,0"><Button Style="{StaticResource ConnectionButton}" Content="复制连接信息" Click="CopyPairingInfo_Click" Margin="0,0,12,8"/><Button Style="{StaticResource ConnectionLink}" Content="关闭配对" Click="Pairing_Click" Margin="0,0,0,8"/></WrapPanel>
+                                    </StackPanel>
+                                    <StackPanel x:Name="ControllerDetails" Visibility="Collapsed">
+                                        <Button x:Name="NearbyButton" AutomationProperties.AutomationId="NearbyButton" Style="{StaticResource ConnectionButton}" Content="查找附近设备" HorizontalAlignment="Left" Click="Discover_Click"/>
+                                        <ListBox x:Name="NearbyList" AutomationProperties.AutomationId="NearbyList" DisplayMemberPath="Display" SelectionChanged="Nearby_SelectionChanged" AutomationProperties.Name="附近设备" FontSize="15" Margin="0,14,0,0" MaxHeight="110"/>
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="18"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                            <StackPanel><TextBlock Text="对方地址" Style="{StaticResource ConnectionFieldLabel}"/><TextBox x:Name="JoinAddress" AutomationProperties.AutomationId="JoinAddress" Style="{StaticResource ConnectionField}" AutomationProperties.Name="对方地址"/></StackPanel>
+                                            <StackPanel Grid.Column="2"><TextBlock Text="安全密钥" Style="{StaticResource ConnectionFieldLabel}"/><PasswordBox x:Name="JoinCode" AutomationProperties.AutomationId="JoinCode" Style="{StaticResource ConnectionField}" AutomationProperties.Name="对方安全配对密钥"/></StackPanel>
+                                        </Grid>
+                                        <WrapPanel Margin="0,24,0,0"><Button x:Name="ConnectButton" AutomationProperties.AutomationId="ConnectButton" Style="{StaticResource ConnectionButton}" Content="连接 →" Click="Connect_Click" Margin="0,0,14,0"/><Button Style="{StaticResource ConnectionLink}" Content="上一步" Click="ConnectionPrevious_Click"/></WrapPanel>
+                                        <TextBlock x:Name="ConnectionFeedback" Style="{StaticResource ConnectionCaption}" Margin="0,14,0,0" AutomationProperties.LiveSetting="Polite"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel x:Name="ConnectionStepThree" Visibility="Collapsed">
+                                    <Border Width="56" Height="56" CornerRadius="28" Background="{DynamicResource LimeWash}" HorizontalAlignment="Left" Margin="0,0,0,20"><TextBlock Text="✓" FontSize="24" Foreground="{DynamicResource LimeDeep}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                                    <TextBlock Text="连接成功" Style="{StaticResource ConnectionHeading}"/>
+                                    <Border Style="{StaticResource ConnectionInfo}"><TextBlock x:Name="ConnectedDevicesText" FontSize="17" Foreground="{DynamicResource Ink}" TextWrapping="Wrap"/></Border>
+                                    <WrapPanel Margin="0,24,0,0"><Button Style="{StaticResource ConnectionButton}" Content="调整屏幕排列 ↗" Click="ArrangeNow_Click" Margin="0,0,12,8"/><Button Style="{StaticResource ConnectionButton}" Content="完成" Click="FinishConnection_Click" Margin="0,0,0,8"/></WrapPanel>
+                                </StackPanel>
+                            </Grid>
+                            <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Margin="0,28,0,0" Padding="0,16,0,0"><Grid><TextBlock Text="局域网连接 · TLS 加密" FontSize="11" Foreground="{DynamicResource Muted}"/><TextBlock x:Name="ConnectionStepCount" Text="步骤 01 / 03" FontSize="11" Foreground="{DynamicResource Muted}" HorizontalAlignment="Right"/></Grid></Border>
+                        </StackPanel>
+                        <StackPanel x:Name="ConnectionOverview" Visibility="Collapsed" VerticalAlignment="Top" Margin="32,48" MaxWidth="1120" HorizontalAlignment="Stretch">
+                            <TextBlock Text="CONNECTED DEVICES" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LimeDeep}" Margin="0,0,0,22"/>
+                            <TextBlock x:Name="OverviewTitle" Text="设备已连接。" FontSize="46" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" Margin="0,0,0,32"/>
+                            <Expander x:Name="PairedDevicesExpander" Header="已配对设备" IsExpanded="True" Foreground="{DynamicResource Ink}" FontSize="14">
+                                <StackPanel Margin="0,16,0,0"><TextBlock x:Name="ConnHost" FontSize="13" Foreground="{DynamicResource Ink70}" Margin="0,0,0,12"/>
+                                    <ListBox x:Name="PeerList" AutomationProperties.AutomationId="PeerList" AutomationProperties.Name="已配对设备" FontSize="17" MaxHeight="340" Background="Transparent">
+                                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,0,12"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="PeerSurface" Background="{DynamicResource Paper2}" BorderBrush="{DynamicResource Line}" BorderThickness="2" CornerRadius="14" Padding="22,18"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="PeerSurface" Property="BorderBrush" Value="{DynamicResource LimeDeep}"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="PeerSurface" Property="Background" Value="{DynamicResource LimeWash}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
+                                        <ListBox.ItemTemplate><DataTemplate><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding DisplayName}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/><TextBlock Text="{Binding Address}" FontSize="13" Foreground="{DynamicResource Ink70}" Margin="0,8,0,0"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding StateText}" FontSize="13" Foreground="{DynamicResource LimeDeep}" VerticalAlignment="Center" Margin="20,0,0,0"/></Grid></DataTemplate></ListBox.ItemTemplate>
+                                    </ListBox>
+                                </StackPanel>
+                            </Expander>
+                            <WrapPanel Margin="0,24,0,0"><Button Style="{StaticResource ConnectionButton}" Content="调整屏幕排列 ↗" Click="ArrangeNow_Click" Margin="0,0,12,10"/><Button Style="{StaticResource ConnectionButton}" Content="连接新设备" Click="AddConnection_Click" Margin="0,0,12,10"/><Button x:Name="ReconnectButton" Style="{StaticResource ConnectionButton}" Content="重新连接" Click="ReconnectPeer_Click" Margin="0,0,12,10"/><Button Style="{StaticResource ConnectionLink}" Content="移除选中设备" Click="RemovePeer_Click" Margin="0,0,0,10"/></WrapPanel>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
 
             <!-- 02 屏幕排列 -->
             <Grid x:Name="PanelArr" Grid.Row="1">
@@ -323,16 +433,17 @@
             <Grid x:Name="PanelSet" Grid.Row="1" Visibility="Collapsed">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="5*" MinWidth="280"/><ColumnDefinition Width="32"/><ColumnDefinition Width="4*" MinWidth="240"/></Grid.ColumnDefinitions>
                 <StackPanel>
-                    <StackPanel AutomationProperties.Name="输入">
-                        <TextBlock Text="输入" Style="{StaticResource Section}"/>
-                        <TextBlock Style="{StaticResource Caption}" Text="键盘跟随鼠标所在设备；左右边缘穿屏。" Margin="0,0,0,16"/>
-                        <Button Style="{StaticResource Primary}" Content="回到本机" Click="ReturnLocal_Click" HorizontalAlignment="Left" Margin="0,0,0,16"/>
-                    </StackPanel>
-                    <StackPanel AutomationProperties.Name="文件与剪贴板" Margin="0,8,0,0">
+                    <StackPanel AutomationProperties.Name="文件与剪贴板">
                         <TextBlock Text="文件与剪贴板" Style="{StaticResource Section}"/>
-                        <CheckBox x:Name="ClipboardCheck" AutomationProperties.AutomationId="ClipboardCheck" Style="{StaticResource Square}" Content="同步剪贴板（文字、图片、文件）" Checked="Clipboard_Changed" Unchecked="Clipboard_Changed"/>
+                        <CheckBox x:Name="ClipboardCheck" AutomationProperties.AutomationId="ClipboardCheck" Style="{StaticResource Square}" Content="同步剪贴板（文字、图片、文件）" IsChecked="{Binding ClipboardSettings.SharingEnabled, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+                        <CheckBox x:Name="HistoryEnabledCheck" AutomationProperties.AutomationId="HistoryEnabledCheck" Style="{StaticResource Square}" Content="记录剪贴板历史" IsChecked="{Binding ClipboardSettings.HistoryEnabled, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+                        <TextBlock Text="历史快捷键" Style="{StaticResource Caption}"/>
+                        <Button x:Name="ClipboardHotkeyButton" AutomationProperties.AutomationId="ClipboardHotkeyButton" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,16" Content="{Binding ClipboardSettings.HotkeyText, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Click="Hotkey_Click" PreviewKeyDown="Hotkey_KeyDown" LostKeyboardFocus="ClipboardHotkey_LostFocus"/>
+                        <TextBlock Text="历史条数上限（0 表示不限条数）" Style="{StaticResource Caption}"/>
+                        <TextBox x:Name="MaxItemsBox" AutomationProperties.AutomationId="MaxItemsBox" Text="{Binding ClipboardSettings.MaxItems, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" HorizontalAlignment="Left" Width="120" Margin="0,8,0,16" PreviewTextInput="MaxItems_PreviewTextInput" DataObject.Pasting="MaxItems_Pasting" LostKeyboardFocus="MaxItems_LostFocus"/>
+                        <CheckBox x:Name="RecordImagesCheck" AutomationProperties.AutomationId="RecordImagesCheck" Style="{StaticResource Square}" Content="记录图片" IsChecked="{Binding ClipboardSettings.CaptureImages, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+                        <CheckBox x:Name="RecordFilesCheck" AutomationProperties.AutomationId="RecordFilesCheck" Style="{StaticResource Square}" Content="记录文件" IsChecked="{Binding ClipboardSettings.CaptureFiles, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
                         <TextBlock Style="{StaticResource Caption}" Text="桌面与资源管理器原生拖放；默认复制，不删除源文件。"/>
-                        <Button AutomationProperties.AutomationId="HistorySettingsButton" Style="{StaticResource Primary}" Content="剪贴板历史与快捷键…" Click="HistorySettings_Click" HorizontalAlignment="Left" Margin="0,12,0,0"/>
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="2" AutomationProperties.Name="外观与系统">

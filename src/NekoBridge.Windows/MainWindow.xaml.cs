@@ -101,6 +101,7 @@ namespace NekoBridge.Windows
         {
             if (PanelConn == null) return;
             var rb = (RadioButton)sender;
+            MainContent.MaxWidth=rb==NavConn?double.PositiveInfinity:960;
             PanelConn.Visibility = rb == NavConn ? Visibility.Visible : Visibility.Collapsed;
             PanelArr.Visibility = rb == NavArr ? Visibility.Visible : Visibility.Collapsed;
             PanelSet.Visibility = rb == NavSet ? Visibility.Visible : Visibility.Collapsed;

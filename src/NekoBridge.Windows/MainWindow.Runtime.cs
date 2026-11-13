@@ -89,6 +89,7 @@ public partial class MainWindow : Window
         _clipboard=new ClipboardSync(_node,()=>_state.Settings.ClipboardEnabled,Log,Dispatcher,()=>_state.Settings.ClipboardHistoryEnabled);
         _historyStore=new HistoryStore(Path.Combine(_state.DirectoryPath,"ClipboardHistory"),new HistoryRetention(_state.Settings.ClipboardHistoryMaxItems,_state.Settings.ClipboardHistoryDays,_state.Settings.ClipboardHistoryMaxBytes));
         _historyBridge=new HistoryBridge(_clipboard,_historyStore,_node,Log,kind=>_state.Settings.ClipboardHistoryEnabled&&(kind switch {"image"=>_state.Settings.ClipboardHistoryCaptureImages,"files"=>_state.Settings.ClipboardHistoryCaptureFiles,_=>true}));
+        ClipboardSettings=new ClipboardSettingsModel(_state.Settings,_state.Save,_historyStore,_clipboard,SetHistoryHotkey,_lifetime.Token);
         _node.Log+=Log;
         _node.PeersChanged+=()=>UI(RefreshPeers);
         _node.MessageReceived+=ReceiveControlMessage;
@@ -122,8 +123,8 @@ public partial class MainWindow : Window
         Resources["GridBrush"]=MakeGrid();
         SideHost.Text=ConnHost.Text=_state.Settings.DeviceName;
         SideIp.Text=LocalAddresses();
+        LocalPairingAddress.Text=SideIp.Text;
         FootLeft.Text=$"{_state.Settings.DeviceName} · 端口 {_listeningPort}";
-        ClipboardCheck.IsChecked=_state.Settings.ClipboardEnabled;
         StartWithWindowsCheck.IsChecked=_state.Settings.StartWithWindows;
         _tray=new Forms.NotifyIcon{Text="NekoBridge · 局域网键鼠共享",Icon=new System.Drawing.Icon(Application.GetResourceStream(new Uri("pack://application:,,,/Assets/nekobridge.ico")).Stream),Visible=true};
         var menu=new Forms.ContextMenuStrip();
@@ -140,8 +141,8 @@ public partial class MainWindow : Window
         Loaded+=(_,_)=>StartNode();
         Closing+=OnClosing;
         PeerList.SelectionChanged+=(_,_)=>{if(PeerList.SelectedItem is PeerSnapshot peer)JoinAddress.Text=peer.Address;};
-        _uiReady=true;RefreshPeers();
-        Loaded+=(_,_)=>{Layout();Stage.Focus();};
+        _uiReady=true;InitializeClipboardSettings();RefreshPeers();
+        Loaded+=(_,_)=>{NavConn.IsChecked=true;Nav_Checked(NavConn,new RoutedEventArgs());Layout();};
     }
     internal void InitializeInBackground()=>StartNode();
     private async void StartNode()
@@ -203,10 +204,7 @@ public partial class MainWindow : Window
         Guid selected=(PeerList.SelectedItem as PeerSnapshot)?.Id??Guid.Empty;
         var peers=_node.Peers.ToArray();PeerList.ItemsSource=peers;
         PeerList.SelectedItem=peers.FirstOrDefault(p=>p.Id==selected)??peers.FirstOrDefault(p=>p.IsConnected);
-        var known=peers.Select(p=>p.Id).Append(_node.LocalId).ToHashSet();
-        var saved=_state.Settings.Layout.Where(known.Contains).Distinct().ToList();
-        foreach(var id in known)if(!saved.Contains(id))saved.Add(id);
-        _state.Settings.Layout=saved;_state.Save();
+        var saved=SyncOnPeers(peers);
         var ordered=saved.Where(id=>id==_node.LocalId||peers.Any(p=>p.Id==id&&p.IsConnected)).ToList();
         _router.SetLayout(ordered);
         _screens.Clear();double x=0;
@@ -234,23 +232,32 @@ public partial class MainWindow : Window
         ShareText.Foreground=(Brush)FindResource(paused?"Vein":"Muted");
         StateDot.Stroke=(Brush)FindResource(_startupError!=null?"Vein":online>0?"LimeDeep":"Muted");
         bool pairing=_node.PairingEnabled;
-        CardCode.Text=_startupError!=null?"STATE / START_FAILED":pairing?"STATE / PAIRING":online>0?"STATE / CONNECTED":_node.Peers.Count>0?"STATE / PEER_OFFLINE":"STATE / UNPAIRED";
-        CardTitle.Text=_startupError!=null?"启动失败":pairing?"已开启安全配对":online>0?"设备已连接":_node.Peers.Count>0?"设备已离线":"尚未配对";
-        CardBody.Text=_startupError??(pairing?"请只向可信电脑提供以下 40 字符安全密钥。5 分钟后自动关闭配对。":online>0?"键鼠按屏幕排列共享。文件从桌面或资源管理器跨屏拖放，默认复制。":_node.Peers.Count>0?"启动时已尝试一次重连。对方上线后，请选中设备并手动连接；已信任设备无需再填密钥。":"在接收方开启配对，再在另一台电脑输入地址与安全密钥连接。连接使用 TLS 与设备证书。" );
         PairingCodeText.Text=pairing?_node.PairingKey:"未开启";
-        CardAction.Content=pairing?"关闭配对":"开启配对";
+        CardAction.Content=pairing?"关闭配对":"开启配对 →";
         CardAction.IsEnabled=_started;
+        RefreshConnectionFlow();
     }
     private async void Connect_Click(object sender,RoutedEventArgs e)
     {
-        ConnectButton.IsEnabled=false;
-        try{await _node.ConnectAsync(JoinAddress.Text.Trim(),JoinCode.Password,_lifetime.Token);JoinCode.Clear();RefreshPeers();}
-        catch(Exception ex){Log($"连接失败：{ex.Message}");ShowNotice("连接失败",ex.Message,false);}
-        finally{ConnectButton.IsEnabled=true;}
+        if(_connecting||!_started)return;
+        _connecting=true;_connectionSucceeded=false;
+        ConnectionFeedback.Text="正在连接…";RefreshConnectionFlow();
+        try
+        {
+            await _node.ConnectAsync(JoinAddress.Text.Trim(),JoinCode.Password,_lifetime.Token);
+            JoinCode.Clear();_connectionSucceeded=true;ConnectionFeedback.Text="连接成功。";RefreshPeers();
+        }
+        catch(Exception ex)
+        {
+            ConnectionFeedback.Text=$"连接失败：{ex.Message}";
+            Log(ConnectionFeedback.Text);
+        }
+        finally{_connecting=false;RefreshConnectionFlow();}
     }
     private void Pairing_Click(object sender,RoutedEventArgs e)
     {
         _node.PairingEnabled=!_node.PairingEnabled;
+        _pairingStarted=_node.PairingEnabled?DateTime.UtcNow:null;
         PairingCodeText.Text=_node.PairingEnabled?_node.PairingKey:"未开启";
         CardAction.Content=_node.PairingEnabled?"关闭配对":"开启配对";
         RefreshStatus();
@@ -259,8 +266,12 @@ public partial class MainWindow : Window
     private async void Discover_Click(object sender,RoutedEventArgs e)
     {
         NearbyButton.IsEnabled=false;
-        try{NearbyList.ItemsSource=await _node.DiscoverAsync(_lifetime.Token);Log("局域网发现已结束。设备仍须手动确认配对。");}
-        catch(Exception ex){Log($"发现失败：{ex.Message}");ShowNotice("发现失败",ex.Message,false);}
+        try
+        {
+            var nearby=await _node.DiscoverAsync(_lifetime.Token);NearbyList.ItemsSource=nearby;
+            ConnectionFeedback.Text=nearby.Count==0?"未找到附近设备，可手动填写地址。":"选择对方设备，再填写安全密钥。";
+        }
+        catch(Exception ex){ConnectionFeedback.Text=$"查找失败：{ex.Message}";Log(ConnectionFeedback.Text);}
         finally{NearbyButton.IsEnabled=true;}
     }
     private void Nearby_SelectionChanged(object sender,SelectionChangedEventArgs e)
@@ -284,11 +295,13 @@ public partial class MainWindow : Window
         double x=e.GetPosition(Stage).X;
         var target=_screens.FirstOrDefault(sc=>sc.Id!=dragged&&x>=sc.X&&x<=sc.X+sc.W);
         if(target==null)return;
-        var list=_state.Settings.Layout;
+        var list=_state.Settings.Layout.ToList();
         int from=list.IndexOf(dragged),to=list.IndexOf(target.Id);
         if(from<0||to<0||from==to)return;
-        _router.ReturnLocal();CancelDrag();list.RemoveAt(from);list.Insert(to,dragged);
-        _state.Save();RefreshPeers();e.Handled=true;
+        list.RemoveAt(from);list.Insert(to,dragged);
+        try{CommitSharedLayout(list);}
+        catch(Exception ex){ShowNotice("屏幕排列保存失败",ex.Message,false);}
+        e.Handled=true;
     }
     private void RemovePeer_Click(object sender,RoutedEventArgs e)
     {
@@ -312,6 +325,7 @@ public partial class MainWindow : Window
         {
             switch(m.Kind)
             {
+                case "layout":ReceiveLayout(peer,m);break;
                 case "capture2":await CaptureRemoteSource(peer,m);break;
                 case "captured2":case "dragready":case "started2":case "released2":
                     if(_dragReplies.TryGetValue((peer,m.Id,m.Kind),out var reply))reply.TrySetResult(m);
@@ -605,13 +619,6 @@ public partial class MainWindow : Window
         TransferBar.Width=ActualWidth*(p.TotalBytes>0?Math.Clamp(p.Bytes/(double)p.TotalBytes,0,1):0);
     }
     private static string FormatBytes(long bytes)=>bytes>=1073741824?$"{bytes/1073741824d:F2} GB":bytes>=1048576?$"{bytes/1048576d:F1} MB":bytes>=1024?$"{bytes/1024d:F1} KB":$"{bytes} B";
-    private void Clipboard_Changed(object sender,RoutedEventArgs e)
-    {
-        if(!_uiReady)return;
-        bool previous=_state.Settings.ClipboardEnabled;
-        try{_state.Settings.ClipboardEnabled=ClipboardCheck.IsChecked==true;_state.Save();_clipboard.EnabledChanged();}
-        catch(Exception ex){_state.Settings.ClipboardEnabled=previous;_uiReady=false;ClipboardCheck.IsChecked=previous;_uiReady=true;ShowNotice("保存失败",ex.Message,false);}
-    }
     private void Startup_Changed(object sender,RoutedEventArgs e)
     {
         if(!_uiReady)return;

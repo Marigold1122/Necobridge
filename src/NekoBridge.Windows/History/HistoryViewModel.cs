@@ -30,11 +30,9 @@ internal sealed class HistoryItem(HistoryEntry entry)
 
 internal sealed class HistoryViewModel:ObservableModel
 {
+    private readonly ClipboardSettingsModel _shared;
     private readonly HistoryStore _store;
     private readonly HistoryBridge _bridge;
-    private readonly AppSettings _settings;
-    private readonly Action _persist;
-    private readonly Func<string,Task> _setHotkey;
     private readonly Func<Task> _close;
     private readonly Action<string> _error;
     private readonly Func<string,bool> _confirm;
@@ -44,7 +42,6 @@ internal sealed class HistoryViewModel:ObservableModel
     private bool _settingsOpen;
     private bool _hasMore;
     private int _loaded;
-    private string _maxItemsText;
     public bool HasMore{get=>_hasMore;private set{_hasMore=value;Changed();}}
     public ICommand LoadMoreCommand{get;}
     private HistoryItem? _selected;
@@ -60,11 +57,13 @@ internal sealed class HistoryViewModel:ObservableModel
     public bool IsEmpty=>Items.Count==0;
     public bool IsFilteredEmpty=>Items.Count>0&&FilteredItems.Count==0;
     public bool IsSettingsOpen{get=>_settingsOpen;set{_settingsOpen=value;Changed();}}
-    public string HotkeyText{get=>_hotkey;private set{_hotkey=value;Changed();}}
+    public string HotkeyText{get=>Recording?_hotkey:_shared.HotkeyText;private set{_hotkey=value;Changed();}}
     internal bool Recording{get;private set;}
-    public string MaxItems{get=>_maxItemsText;set{_maxItemsText=value;Changed();}}
-    public bool CaptureImages{get=>_settings.ClipboardHistoryCaptureImages;set{_settings.ClipboardHistoryCaptureImages=value;Changed();}}
-    public bool CaptureFiles{get=>_settings.ClipboardHistoryCaptureFiles;set{_settings.ClipboardHistoryCaptureFiles=value;Changed();}}
+    public string MaxItems{get=>_shared.MaxItems;set=>_shared.MaxItems=value;}
+    public bool SharingEnabled{get=>_shared.SharingEnabled;set=>_shared.SharingEnabled=value;}
+    public bool HistoryEnabled{get=>_shared.HistoryEnabled;set=>_shared.HistoryEnabled=value;}
+    public bool CaptureImages{get=>_shared.CaptureImages;set=>_shared.CaptureImages=value;}
+    public bool CaptureFiles{get=>_shared.CaptureFiles;set=>_shared.CaptureFiles=value;}
     public ICommand ClearSearchCommand{get;}
     public ICommand OpenSettingsCommand{get;}
     public ICommand CloseSettingsCommand{get;}
@@ -76,9 +75,11 @@ internal sealed class HistoryViewModel:ObservableModel
     public ICommand DeleteCommand{get;}
     public ICommand ToggleFavoriteCommand{get;}
 
-    internal HistoryViewModel(HistoryStore store,HistoryBridge bridge,AppSettings settings,Action persist,Func<string,Task> setHotkey,Func<Task> close,Action<string> error,Func<string,bool> confirm,CancellationToken lifetime)
+    internal HistoryViewModel(HistoryStore store,HistoryBridge bridge,ClipboardSettingsModel clipboardSettings,Func<Task> close,Action<string> error,Func<string,bool> confirm,CancellationToken lifetime)
     {
-        _store=store;_bridge=bridge;_settings=settings;_persist=persist;_setHotkey=setHotkey;_close=close;_error=error;_confirm=confirm;_lifetime=lifetime;_hotkey=settings.ClipboardHistoryHotkey;_maxItemsText=settings.ClipboardHistoryMaxItems.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        _shared=clipboardSettings;
+        _shared.PropertyChanged+=(_,e)=>Changed(e.PropertyName);
+        _store=store;_bridge=bridge;_close=close;_error=error;_confirm=confirm;_lifetime=lifetime;_hotkey=_shared.HotkeyText;
         HistoryCommand Command(Func<object?,Task> action)
         {
             var command=new HistoryCommand(async parameter=>{if(Busy)return;SetBusy(true);try{await action(parameter);}finally{SetBusy(false);}},ex=>_error(ex.Message),_=>!Busy);
@@ -88,12 +89,7 @@ internal sealed class HistoryViewModel:ObservableModel
         OpenSettingsCommand=Command(_=>{IsSettingsOpen=true;return Task.CompletedTask;});
         CloseSettingsCommand=Command(async _=>
         {
-            if(!int.TryParse(MaxItems,System.Globalization.NumberStyles.None,System.Globalization.CultureInfo.InvariantCulture,out int count)||count<0)
-                throw new ArgumentException("条数请输入非负整数，0 表示不限条数。");
-            int previous=settings.ClipboardHistoryMaxItems;
-            settings.ClipboardHistoryMaxItems=count;
-            try{_persist();}catch{settings.ClipboardHistoryMaxItems=previous;throw;}
-            await _store.UpdateRetentionAsync(new HistoryRetention(count,settings.ClipboardHistoryDays,settings.ClipboardHistoryMaxBytes),lifetime);
+            await _shared.ApplyAsync();
             IsSettingsOpen=false;await RefreshAsync();
         });
         CloseCommand=Command(_=>_close());
@@ -108,10 +104,10 @@ internal sealed class HistoryViewModel:ObservableModel
     internal async Task RecordHotkey(string shortcut)
     {
         if(!Recording)return;
-        try{await _setHotkey(shortcut);HotkeyText=_settings.ClipboardHistoryHotkey;Recording=false;}
-        catch(Exception ex){HotkeyText=_settings.ClipboardHistoryHotkey;Recording=false;_error(ex.Message);}
+        try{await _shared.SetHotkeyAsync(shortcut);Recording=false;HotkeyText=_shared.HotkeyText;}
+        catch(Exception ex){Recording=false;HotkeyText=_shared.HotkeyText;_error(ex.Message);}
     }
-    internal void CancelRecording(){Recording=false;HotkeyText=_settings.ClipboardHistoryHotkey;}
+    internal void CancelRecording(){Recording=false;HotkeyText=_shared.HotkeyText;}
     internal async Task ActivateSelectedAsync()
     {
         if(Busy)return;SetBusy(true);
