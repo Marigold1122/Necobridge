@@ -328,7 +328,7 @@ public sealed partial class BridgeNode : IAsyncDisposable
     }
     private static void ValidateMessage(ControlMessage message)
     {
-        if (message.Kind is not ("enter" or "leave" or "move" or "button" or "wheel" or "key" or "keepalive" or "yield" or "clipboard" or "capture" or "dragoffer" or "dragready" or "capture2" or "captured2" or "prepare2" or "commit2" or "started2" or "release2" or "released2" or "abort2" or "dragcancel" or "manualoffer" or "manualdone" or "layout")) throw new InvalidDataException("未知控制事件。");
+        if (message.Kind is not ("enter" or "leave" or "move" or "button" or "wheel" or "key" or "keepalive" or "yield" or "clipboard" or "capture" or "dragoffer" or "dragready" or "capture2" or "captured2" or "prepare2" or "commit2" or "started2" or "release2" or "released2" or "abort2" or "dragcancel" or "manualoffer" or "manualdone" or "layout" or "layout2")) throw new InvalidDataException("未知控制事件。");
         if (message.Text?.Length > 512000 || message.Payload?.Length > 512000) throw new InvalidDataException("控制消息过大。");
     }
     private static void ValidateDevice(DeviceDescriptor d)

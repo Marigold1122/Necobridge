@@ -16,6 +16,7 @@ public partial class MainWindow
     private bool _connectionSucceeded;
     private bool _connecting;
     private DateTime? _pairingStarted;
+    private System.Threading.CancellationTokenSource? _guideConnectStop;
     private bool _connectionTransition;
     private FrameworkElement? _connectionView;
     private int _connectionStage;
@@ -67,7 +68,7 @@ public partial class MainWindow
     private void SelectConnectionRole(bool controller)
     {
         if(_connecting||_connectionTransition)return;
-        if(controller&&_node.PairingEnabled){_node.PairingEnabled=false;_pairingStarted=null;}
+        if(controller)CancelGuidePairing();
         _connectionController=controller;_connectionPrepared=false;_connectionSucceeded=false;
         _connectionExistingPeers.Clear();
         _connectionExistingPeers.UnionWith(_node.Peers.Where(p=>p.IsConnected).Select(p=>p.Id));
@@ -78,7 +79,7 @@ public partial class MainWindow
     private void ChangeConnectionRole_Click(object sender,RoutedEventArgs e)
     {
         if(_connecting||_connectionTransition)return;
-        if(_node.PairingEnabled){_node.PairingEnabled=false;_pairingStarted=null;}
+        CancelGuidePairing();
         _connectionController=null;_connectionOverviewRequested=false;
         JoinCode.Clear();ShowConnectionView(ConnectionIntro);RefreshStatus();
     }
@@ -87,7 +88,7 @@ public partial class MainWindow
     {
         if(_connectionTransition)return;
         _connectionController=null;_connectionOverviewRequested=true;
-        if(_node.PairingEnabled){_node.PairingEnabled=false;_pairingStarted=null;}
+        CancelGuidePairing();
         ShowConnectionView(ConnectionOverview);RefreshStatus();
     }
     private void Prepared_Click(object sender,RoutedEventArgs e)
@@ -104,7 +105,8 @@ public partial class MainWindow
         var peers=_node.Peers.ToArray();var online=peers.Where(p=>p.IsConnected).ToArray();
         PairedDevicesExpander.Header=$"已配对设备（{peers.Length}）";
         OverviewTitle.Text=online.Length>0?"设备已连接。":"已配对设备。";
-        ReconnectButton.IsEnabled=_started&&!_connecting;
+        ReturnDevicesButton.Visibility=peers.Length>0&&_connectionView!=ConnectionOverview?Visibility.Visible:Visibility.Collapsed;
+        ReturnDevicesButton.IsEnabled=!_connectionTransition;
         ControllerRoleButton.IsEnabled=ReceiverRoleButton.IsEnabled=ChangeRoleButton.IsEnabled=!_connecting&&!_connectionTransition;
         if(_connectionController is not bool controller)
         {
@@ -163,13 +165,5 @@ public partial class MainWindow
         if(!_node.PairingEnabled){ShowNotice("配对已关闭","请先开启配对。",false);return;}
         try{Clipboard.SetText($"{LocalPairingAddress.Text}\n{_node.PairingKey}");}
         catch(Exception ex){ShowNotice("复制失败",ex.Message,false);}
-    }
-    private void ReconnectPeer_Click(object sender,RoutedEventArgs e)
-    {
-        if(_connecting||_connectionTransition)return;
-        if(PeerList.SelectedItem is not PeerSnapshot peer){ShowNotice("重新连接","请先选择设备。",false);return;}
-        SelectConnectionRole(true);_connectionPrepared=true;
-        JoinAddress.Text=peer.Address;JoinCode.Clear();RefreshConnectionFlow();
-        Connect_Click(sender,e);
     }
 }

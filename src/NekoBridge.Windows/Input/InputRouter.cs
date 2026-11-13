@@ -25,6 +25,7 @@ internal sealed class InputRouter : IDisposable
     private long _generation;
     internal long Generation {get{lock(_gate)return _generation;}}
     private Guid[] _layout=Array.Empty<Guid>();
+    private LayoutCell[] _cells=Array.Empty<LayoutCell>();
     private Guid _active;
     private Guid _owner;
     private DateTime _lastIncoming;
@@ -66,14 +67,16 @@ internal sealed class InputRouter : IDisposable
         _sender=Task.Run(SendLoopAsync);
         _timer=new System.Threading.Timer(Tick,null,8,8);
     }
-    internal void SetLayout(IEnumerable<Guid> layout)
+    internal void SetLayout(IEnumerable<Guid> layout)=>SetLayout(layout.Select((id,i)=>new LayoutCell(id,i,0)));
+    internal void SetLayout(IEnumerable<LayoutCell> layout)
     {
         lock(_gate)
         {
-            var ids=layout.Distinct().Where(id=>id==_node.LocalId||_node.Peers.Any(p=>p.Id==id&&p.IsConnected)).ToList();
-            if(!ids.Contains(_node.LocalId))ids.Insert(0,_node.LocalId);
-            _layout=ids.ToArray();
-            if(!_layout.Contains(_active)) ReturnLocalLocked();
+            var cells=layout.ToArray();
+            if(!LayoutSync.ValidCells(cells)||!cells.Any(c=>c.Id==_node.LocalId))throw new ArgumentException("本机屏幕位置无效。");
+            _cells=cells;
+            _layout=cells.Where(c=>c.Id==_node.LocalId||_node.Peers.Any(p=>p.Id==c.Id&&p.IsConnected)).Select(c=>c.Id).ToArray();
+            if(!_layout.Contains(_active))ReturnLocalLocked();
         }
     }
     internal void SetPaused(bool value)
@@ -151,20 +154,8 @@ internal sealed class InputRouter : IDisposable
             {
                 if(e.Kind=="move"&&!_edgePending&&!_dragCrossingBlocked)
                 {
-                    int direction=e.X<=Left ? -1:e.X>=Left+Width-1 ? 1:0;
-                    if(direction!=0)
-                    {
-                        Guid next=Neighbor(direction);
-                        if(next!=Guid.Empty)
-                        {
-                            _edgePending=true;
-                            var size=Size(next);
-                            int nx=direction>0?Math.Min(2,size.W-1):Math.Max(0,size.W-3);
-                            int ny=MapVertical(e.Y-Top,Height,size.H);
-                            if(_leftDown)EdgeCrossing?.Invoke(_active,next,nx,ny,true);
-                            else {CompleteCrossing(next,nx,ny);return true;}
-                        }
-                    }
+                    var side=DetectSide(e.X-Left,e.Y-Top,Width,Height,true);
+                    if(TryCross(side,e.X-Left,e.Y-Top,Width,Height))return true;
                 }
                 return false;
             }
@@ -184,22 +175,11 @@ internal sealed class InputRouter : IDisposable
                     ReturnLocalLocked();return false;
                 }
                 double nextX=_x+NormalizePointerDelta((double)e.X-parked.X,Width,_targetWidth);
-                _y=Math.Clamp(_y+NormalizePointerDelta((double)e.Y-parked.Y,Height,_targetHeight),0,_targetHeight-1);
-                int direction=nextX<0?-1:nextX>_targetWidth-1?1:0;
-                if(direction!=0&&!_edgePending&&!_dragCrossingBlocked)
-                {
-                    Guid next=Neighbor(direction);
-                    if(next!=Guid.Empty)
-                    {
-                        _edgePending=true;
-                        var ns=Size(next);
-                        int nx=direction>0?Math.Min(2,ns.W-1):Math.Max(0,ns.W-3);
-                        int ny=MapVertical(_y,_targetHeight,ns.H);
-                        if(_leftDown)EdgeCrossing?.Invoke(_active,next,nx,ny,true);
-                        else {CompleteCrossing(next,nx,ny);return true;}
-                    }
-                }
+                double nextY=_y+NormalizePointerDelta((double)e.Y-parked.Y,Height,_targetHeight);
+                var side=DetectSide(nextX,nextY,_targetWidth,_targetHeight,false);
+                if(!_edgePending&&!_dragCrossingBlocked&&TryCross(side,nextX,nextY,_targetWidth,_targetHeight))return true;
                 _x=Math.Clamp(nextX,0,_targetWidth-1);
+                _y=Math.Clamp(nextY,0,_targetHeight-1);
                 _move=(_active,new ControlMessage{Kind="move",X=(int)Math.Round(_x),Y=(int)Math.Round(_y)});
                 return true;
             }
@@ -208,10 +188,23 @@ internal sealed class InputRouter : IDisposable
             return true;
         }
     }
-    private Guid Neighbor(int direction)
+    internal static LayoutSide DetectSide(double x,double y,int width,int height,bool local)
     {
-        int index=Array.IndexOf(_layout,_active)+direction;
-        return index>=0&&index<_layout.Length?_layout[index]:Guid.Empty;
+        if(local?x<=0:x<0)return LayoutSide.Left;
+        if(local?x>=width-1:x>width-1)return LayoutSide.Right;
+        if(local?y<=0:y<0)return LayoutSide.Up;
+        if(local?y>=height-1:y>height-1)return LayoutSide.Down;
+        return LayoutSide.None;
+    }
+    private bool TryCross(LayoutSide side,double x,double y,int width,int height)
+    {
+        var next=LayoutSync.Neighbor(_cells,_active,side);
+        if(next==Guid.Empty||!_layout.Contains(next))return false;
+        var size=Size(next);var entry=LayoutSync.Entry(side,x,y,width,height,size.W,size.H);
+        _edgePending=true;
+        if(_leftDown)EdgeCrossing?.Invoke(_active,next,entry.X,entry.Y,true);
+        else if(!CompleteCrossing(next,entry.X,entry.Y))_edgePending=false;
+        return true;
     }
     private (int W,int H) Size(Guid id)
     {
@@ -221,9 +214,6 @@ internal sealed class InputRouter : IDisposable
     }
     internal static double NormalizePointerDelta(double delta,int sourceExtent,int targetExtent)
         => delta/Math.Max(1,sourceExtent)*Math.Max(1,targetExtent);
-
-    private static int MapVertical(double y,int sourceHeight,int targetHeight)
-        => (int)Math.Round(Math.Clamp(y/Math.Max(1,sourceHeight-1),0,1)*(targetHeight-1));
 
     internal bool CompleteCrossing(Guid target,int x,int y,bool nativeDrag=false,long expectedGeneration=-1,ControlMessage? dragCommit=null,Action? beforeDragSwitch=null)
     {
@@ -267,7 +257,7 @@ internal sealed class InputRouter : IDisposable
         var screen=System.Windows.Forms.Screen.AllScreens.OrderBy(s=>s.Bounds.Top).ThenByDescending(s=>s.Primary).FirstOrDefault();
         if(screen is null)return;
         var bounds=screen.Bounds;
-        int x=bounds.Left+bounds.Width/2,y=bounds.Top;
+        int x=bounds.Left+bounds.Width/2,y=bounds.Top+Math.Min(4,bounds.Height-1);
         _parking.Show(x,y);
         try{NativeMethods.MoveCursor(x,y);}
         catch(System.ComponentModel.Win32Exception ex){RestoreParking();_log($"无法停放光标：{ex.Message}");}

@@ -14,87 +14,24 @@ namespace NekoBridge.Windows
 {
     public class ScreenItem
     {
-        public Guid Id { get; set; } public string Name { get; set; } = ""; public string Res { get; set; } = ""; public bool Primary { get; set; }
-        public Rect Px { get; set; } public double X { get; set; } public double Y { get; set; } public double W { get; set; } public double H { get; set; }
-        public Rect View => new Rect(X, Y, W, H);
+        public Guid Id{get;set;} public string Name{get;set;}="";public string Res{get;set;}="";
+        public bool Primary{get;set;} public bool Online{get;set;} public int Column{get;set;} public int Row{get;set;}
+        public int PixelWidth{get;set;} public int PixelHeight{get;set;}
+        public double X{get;set;}public double Y{get;set;}public double W{get;set;}public double H{get;set;}
+        public double SlotW{get;set;}public double SlotH{get;set;}
+        public bool HasPadding=>W<SlotW-.1||H<SlotH-.1;
+        public string Role=>Primary?"本机 · 虚拟桌面":Online?"远端设备":"设备离线";
+        public Rect View=>new Rect(X,Y,W,H);
     }
-
     public partial class MainWindow : Window
     {
-        enum Side { None, Left, Top, Right, Bottom }
-        Side _hot;
-        void Stage_SizeChanged(object sender, SizeChangedEventArgs e) => Layout();
-        List<ScreenItem> _screens = new();
-
-        // 等比缩放 + 居中，数据驱动而不是硬编码尺寸
-        void Layout()
-        {
-            if (_screens.Count == 0 || Stage.ActualWidth < 8 || Stage.ActualHeight < 8) return;
-            double minX = _screens.Min(s => s.Px.Left), minY = _screens.Min(s => s.Px.Top);
-            double bw = Math.Max(1, _screens.Max(s => s.Px.Right) - minX), bh = Math.Max(1, _screens.Max(s => s.Px.Bottom) - minY);
-            double s = Math.Min(Math.Min((Stage.ActualWidth - 64) / bw, (Stage.ActualHeight - 64) / bh), 1.0);
-            double ox = (Stage.ActualWidth - bw * s) / 2, oy = (Stage.ActualHeight - bh * s) / 2;
-            foreach (var sc in _screens)
-            {
-                sc.X = (sc.Px.Left - minX) * s + ox; sc.Y = (sc.Px.Top - minY) * s + oy;
-                sc.W = sc.Px.Width * s; sc.H = sc.Px.Height * s;
-            }
-            if (Screens.ItemsSource is object src) { Screens.ItemsSource = null; Screens.ItemsSource = _screens; }
-        }
-
-        // ---------------- 越界语言：热区 / 方向 / 目标 ----------------
-        void SetHot(Side side, bool drag = false)
-        {
-            if (side == Side.None) { EdgeZone.Visibility = EdgeTag.Visibility = Visibility.Collapsed; _hot = Side.None; return; }
-            _hot = side;
-            double t = 10, w = Stage.ActualWidth, h = Stage.ActualHeight;
-            EdgeZone.Visibility = Visibility.Visible; EdgeZone.Fill = (Brush)FindResource("Lime"); EdgeZone.Opacity = 0.22;
-            EdgeZone.Width = side is Side.Left or Side.Right ? t : w;
-            EdgeZone.Height = side is Side.Top or Side.Bottom ? t : h;
-            Canvas.SetLeft(EdgeZone, side == Side.Right ? w - t : 0);
-            Canvas.SetTop(EdgeZone, side == Side.Bottom ? h - t : 0);
-            ArrowRot.Angle = side switch { Side.Left => 180, Side.Top => -90, Side.Bottom => 90, _ => 0 };
-            int i = _screens.FindIndex(sc => sc.Primary);
-            int target = side == Side.Left ? i - 1 : side == Side.Right ? i + 1 : -1;
-            EdgeText.Text = _router.Paused ? "共享已暂停" : target >= 0 && target < _screens.Count
-                ? $"穿屏目标 · {_screens[target].Name}" : "此方向无远端设备";
-            EdgeTag.Visibility = Visibility.Visible;
-            EdgeTag.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            double tw = EdgeTag.DesiredSize.Width, th = EdgeTag.DesiredSize.Height;
-            double lx = side switch { Side.Left => t + 8, Side.Right => w - t - tw - 8, _ => (w - tw) / 2 };
-            double ly = side switch { Side.Top => t + 8, Side.Bottom => h - t - th - 8, _ => (h - th) / 2 };
-            Canvas.SetLeft(EdgeTag, Math.Max(8, lx)); Canvas.SetTop(EdgeTag, Math.Max(8, ly));
-        }
-
-        static Side Hit(Point p, double w, double h)
-        {
-            const double t = 16;
-            if (p.Y <= t) return Side.Top; if (p.Y >= h - t) return Side.Bottom;
-            if (p.X <= t) return Side.Left; if (p.X >= w - t) return Side.Right;
-            return Side.None;
-        }
-
-        void Stage_MouseMove(object sender, MouseEventArgs e) => SetHot(Hit(e.GetPosition(Stage), Stage.ActualWidth, Stage.ActualHeight));
-        void Stage_Leave(object sender, RoutedEventArgs e) => SetHot(Side.None);
-        void Stage_KeyDown(object sender, KeyEventArgs e)
-        {
-            switch (e.Key)
-            {
-                case Key.Left: SetHot(Side.Left); break; case Key.Right: SetHot(Side.Right); break;
-                case Key.Up: SetHot(Side.Top); break; case Key.Down: SetHot(Side.Bottom); break;
-                case Key.Escape: SetHot(Side.None); break; default: return;
-            }
-            e.Handled = true;
-        }
-
-        void Stage_DragOver(object sender, DragEventArgs e)
-        {
-            e.Effects = DragDropEffects.None;
-            var p = e.GetPosition(Stage);
-            SetHot(Hit(p, Stage.ActualWidth, Stage.ActualHeight) is Side.None ? Side.Bottom : Hit(p, Stage.ActualWidth, Stage.ActualHeight), true);
-            e.Handled = true;
-        }
-        void Stage_Drop(object sender, DragEventArgs e) { SetHot(Side.None); e.Handled = true; }
+        List<ScreenItem> _screens=new();
+        void Stage_SizeChanged(object sender,SizeChangedEventArgs e)=>Layout();
+        void Stage_Leave(object sender,RoutedEventArgs e) { }
+        void Stage_KeyDown(object sender,KeyEventArgs e)=>MoveSelectedScreen(sender,e);
+        void Stage_MouseMove(object sender,MouseEventArgs e)=>MoveScreenPreview(sender,e);
+        void Stage_DragOver(object sender,DragEventArgs e){e.Effects=DragDropEffects.None;e.Handled=true;}
+        void Stage_Drop(object sender,DragEventArgs e){e.Effects=DragDropEffects.None;e.Handled=true;}
 
         // ---------------- 导航 / 暂停 / 主题 ----------------
         void Nav_Checked(object sender, RoutedEventArgs e)
@@ -114,7 +51,7 @@ namespace NekoBridge.Windows
             if (!_uiReady) return;
             _router.SetPaused(PauseToggle.IsChecked == true);
             CancelDrag(); RefreshStatus();
-            if (_router.Paused) SetHot(Side.None);
+            Layout();
         }
 
         void Theme_Changed(object sender, RoutedEventArgs e) => ApplyTheme(DarkCheck.IsChecked == true);
@@ -127,6 +64,7 @@ namespace NekoBridge.Windows
             foreach (var (key, value) in m) Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
             Resources["GridBrush"] = MakeGrid();
             Background = (Brush)Resources["Paper"];
+            Layout();
         }
 
         DrawingBrush MakeGrid()

@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Windows-x64-1B2130?style=flat-square" alt="Windows x64">
-  <img src="https://img.shields.io/badge/version-1.00-58790F?style=flat-square" alt="1.00">
+  <img src="https://img.shields.io/badge/version-1.1.0-58790F?style=flat-square" alt="1.1.0">
 </p>
 
 ---
@@ -23,7 +23,7 @@
 
 ### 键盘和鼠标的共享
 
-把鼠标从屏幕左右的端向外移动，指针会移到旁边的 PC。排列顺序可以在设置里决定，所以只要配合实际的配置，就不会搞错方向。无论什么时候想回到自己的 PC，按 `Ctrl+Alt+Home`。
+把鼠标从屏幕上下左右的端向外移动，指针会移到旁边的 PC。排列顺序可以在设置里决定，所以只要配合实际的配置，就不会搞错方向。无论什么时候想回到自己的 PC，按 `Ctrl+Alt+Home`。
 
 ### 文件的拖放
 
@@ -43,7 +43,7 @@
 
 ## 安装
 
-从 [Releases](https://github.com/Marigold1122/Necobridge/releases/latest) 下载 `NekoBridge-1.00-win-x64.zip`，解压到任意的文件夹，执行 `NekoBridge.exe`。因为 .NET 运行时被同捆，所以没有必要另外安装。因为只有执行文件单体不会动作，请整个文件夹一起放置。
+从 [Releases](https://github.com/Marigold1122/Necobridge/releases/latest) 下载 `NekoBridge-1.1.0-win-x64.zip`，解压到任意的文件夹，执行 `NekoBridge.exe`。因为 .NET 运行时被同捆，所以没有必要另外安装。因为只有执行文件单体不会动作，请整个文件夹一起放置。
 
 请让连接的 PC 全部使用相同的版本。更新的情况下，从任务托盘结束旧版本之后，启动新的。配对的信息就那样留下。
 
@@ -66,7 +66,7 @@
 ## 限制
 
 - 只有 Windows x64。不对应 macOS。
-- 1 台 PC 有多个显示器的情况下，它们被作为 1 个虚拟桌面处理。不对应任意的 2 维配置。
+- 1 台 PC 有多个显示器的情况下，它们被作为 1 个虚拟桌面处理。电脑之间可以按上下左右排列，屏幕框的大小不表示真实分辨率。
 - 在 UAC 的安全桌面、登录画面、以管理员权限动作的窗口不能输入。这是由 OS 的机制造成的限制。
 - 游戏、反作弊、独占输入的软件、远程桌面的嵌套等是动作保证的对象外。
 - 符号链接、回收站、智能手机、压缩文件的内部等不是普通的文件，所以不会成为拖动的对象。

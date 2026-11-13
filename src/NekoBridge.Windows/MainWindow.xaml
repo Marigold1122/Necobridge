@@ -158,7 +158,7 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Image Source="/NekoBridge;component/Assets/logo.png" Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock Text="NekoBridge" Margin="8,0,0,0" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
-                    <TextBlock Text="1.00" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
+                    <TextBlock Text="1.1.0" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="32,0,0,0" VerticalAlignment="Center">
                     <Ellipse x:Name="StateDot" Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Muted}"/>
@@ -265,6 +265,10 @@
                             <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource Paper2}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
                         </ControlTemplate></Setter.Value></Setter>
                     </Style>
+                    <Style x:Key="PeerIcon" TargetType="Button">
+                        <Setter Property="Width" Value="42"/><Setter Property="Height" Value="42"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Foreground" Value="{DynamicResource Ink70}"/><Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+                        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="IconBg" CornerRadius="10" Background="Transparent"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="IconBg" Property="Background" Value="{DynamicResource LimeWash}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter TargetName="IconBg" Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+                    </Style>
                     <Style x:Key="ConnectionRole" TargetType="Button">
                         <Setter Property="MinHeight" Value="210"/><Setter Property="Padding" Value="26"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/>
                         <Setter Property="Background" Value="{DynamicResource Paper2}"/><Setter Property="BorderBrush" Value="#A9B394"/><Setter Property="Cursor" Value="Hand"/>
@@ -286,7 +290,8 @@
                 </Grid.Resources>
                 <ScrollViewer x:Name="ConnectionScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" SizeChanged="ConnectionScroll_SizeChanged">
                     <Grid x:Name="ConnectionCanvas" Margin="12,0,12,12">
-                        <Grid x:Name="ConnectionIntro" VerticalAlignment="Center" Margin="24,32">
+                        <Button x:Name="ReturnDevicesButton" Panel.ZIndex="5" Style="{StaticResource ConnectionLink}" Content="← 返回设备列表" Visibility="Collapsed" HorizontalAlignment="Left" VerticalAlignment="Top" Click="ReturnDevices_Click"/>
+                        <Grid x:Name="ConnectionIntro" VerticalAlignment="Center" Margin="24,64,24,32">
                             <StackPanel>
                                 <TextBlock Text="NEKOBRIDGE / CONNECT" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource LimeDeep}" Margin="0,0,0,24"/>
                                 <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" Margin="0,0,0,44"><TextBlock Text="这台主机是作为…" FontSize="52" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/></Viewbox>
@@ -313,7 +318,7 @@
                                 </Grid>
                             </StackPanel>
                         </Grid>
-                        <StackPanel x:Name="ConnectionSteps" Visibility="Collapsed" Margin="24,28">
+                        <StackPanel x:Name="ConnectionSteps" Visibility="Collapsed" Margin="24,64,24,28">
                             <Grid Margin="0,0,0,28"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <StackPanel><TextBlock x:Name="ConnectionRoleHint" FontSize="11" Foreground="{DynamicResource LimeDeep}" FontWeight="SemiBold" Margin="0,0,0,10"/><TextBlock x:Name="ConnectionFlowTitle" FontSize="32" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/></StackPanel>
                                 <Button x:Name="ChangeRoleButton" Grid.Column="1" Style="{StaticResource ConnectionLink}" Content="← 重新选择角色" VerticalAlignment="Top" Click="ChangeConnectionRole_Click"/>
@@ -371,11 +376,25 @@
                                 <StackPanel Margin="0,16,0,0"><TextBlock x:Name="ConnHost" FontSize="13" Foreground="{DynamicResource Ink70}" Margin="0,0,0,12"/>
                                     <ListBox x:Name="PeerList" AutomationProperties.AutomationId="PeerList" AutomationProperties.Name="已配对设备" FontSize="17" MaxHeight="340" Background="Transparent">
                                         <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="0,0,0,12"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="PeerSurface" Background="{DynamicResource Paper2}" BorderBrush="{DynamicResource Line}" BorderThickness="2" CornerRadius="14" Padding="22,18"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="PeerSurface" Property="BorderBrush" Value="{DynamicResource LimeDeep}"/></Trigger><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="PeerSurface" Property="Background" Value="{DynamicResource LimeWash}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
-                                        <ListBox.ItemTemplate><DataTemplate><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{Binding DisplayName}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/><TextBlock Text="{Binding Address}" FontSize="13" Foreground="{DynamicResource Ink70}" Margin="0,8,0,0"/></StackPanel><TextBlock Grid.Column="1" Text="{Binding StateText}" FontSize="13" Foreground="{DynamicResource LimeDeep}" VerticalAlignment="Center" Margin="20,0,0,0"/></Grid></DataTemplate></ListBox.ItemTemplate>
+                                        <ListBox.ItemTemplate><DataTemplate>
+                                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <StackPanel><TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/><TextBlock Text="{Binding Address}" FontSize="13" Foreground="{DynamicResource Ink70}" Margin="0,8,0,0"/><TextBlock Text="{Binding Error}" FontSize="12" Foreground="{DynamicResource Vein}" TextWrapping="Wrap" Margin="0,6,0,0"/></StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                                    <Button Style="{StaticResource PeerIcon}" Click="ReconnectPeer_Click" IsEnabled="{Binding CanOperate}" ToolTip="重新连接" AutomationProperties.Name="重新连接">
+                                                        <Path Width="22" Height="22" Stretch="Uniform" Data="M19.3,9 A7.7,7.7 0 1 0 19.5,14.5 M19.3,4.5 V9 H14.8" Stroke="{DynamicResource Ink70}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" RenderTransformOrigin="0.5,0.5">
+                                                            <Path.RenderTransform><RotateTransform/></Path.RenderTransform>
+                                                            <Path.Style><Style TargetType="Path"><Style.Triggers><DataTrigger Binding="{Binding Busy}" Value="True"><DataTrigger.EnterActions><BeginStoryboard x:Name="ReconnectSpin"><Storyboard><DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)" From="0" To="360" Duration="0:0:0.8" RepeatBehavior="Forever"/></Storyboard></BeginStoryboard></DataTrigger.EnterActions><DataTrigger.ExitActions><StopStoryboard BeginStoryboardName="ReconnectSpin"/></DataTrigger.ExitActions></DataTrigger></Style.Triggers></Style></Path.Style>
+                                                        </Path>
+                                                    </Button>
+                                                    <Button Style="{StaticResource PeerIcon}" Click="RemovePeer_Click" IsEnabled="{Binding CanOperate}" ToolTip="移除设备" AutomationProperties.Name="移除设备"><Path Width="22" Height="22" Stretch="Uniform" Data="M4.5,6.5 H19.5 M9,6.5 V4.8 Q9,3.5 10.2,3.5 H13.8 Q15,3.5 15,4.8 V6.5 M6.5,6.5 L7.3,18.7 Q7.4,20.5 9.1,20.5 H14.9 Q16.6,20.5 16.7,18.7 L17.5,6.5 M10,10 V16.5 M14,10 V16.5" Stroke="{DynamicResource Ink70}" StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/></Button>
+                                                    <TextBlock Text="{Binding Status}" FontSize="13" Foreground="{DynamicResource LimeDeep}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate></ListBox.ItemTemplate>
                                     </ListBox>
                                 </StackPanel>
                             </Expander>
-                            <WrapPanel Margin="0,24,0,0"><Button Style="{StaticResource ConnectionButton}" Content="调整屏幕排列 ↗" Click="ArrangeNow_Click" Margin="0,0,12,10"/><Button Style="{StaticResource ConnectionButton}" Content="连接新设备" Click="AddConnection_Click" Margin="0,0,12,10"/><Button x:Name="ReconnectButton" Style="{StaticResource ConnectionButton}" Content="重新连接" Click="ReconnectPeer_Click" Margin="0,0,12,10"/><Button Style="{StaticResource ConnectionLink}" Content="移除选中设备" Click="RemovePeer_Click" Margin="0,0,0,10"/></WrapPanel>
+                            <WrapPanel Margin="0,24,0,0"><Button Style="{StaticResource ConnectionButton}" Content="连接新设备" Click="AddConnection_Click" Margin="0,0,22,10"/><Button Style="{StaticResource ConnectionLink}" Content="调整屏幕排列 ↗" Click="ArrangeNow_Click" Margin="0,0,0,10"/></WrapPanel>
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>
@@ -386,7 +405,7 @@
                 <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Border x:Name="Stage" AutomationProperties.AutomationId="Stage" BorderBrush="{DynamicResource Line}" BorderThickness="1" Background="{DynamicResource GridBrush}"
                         AllowDrop="False" Focusable="True" FocusVisualStyle="{StaticResource FocusRing}" ClipToBounds="True"
-                        AutomationProperties.Name="屏幕排列画布，拖动设备调整水平顺序，方向键查看边缘"
+                        AutomationProperties.Name="屏幕排列画布，拖动设备调整上下左右位置，方向键移动选中设备"
                         SizeChanged="Stage_SizeChanged" MouseMove="Stage_MouseMove" MouseLeave="Stage_Leave" KeyDown="Stage_KeyDown"
                         DragEnter="Stage_DragOver" DragOver="Stage_DragOver" DragLeave="Stage_Leave" Drop="Stage_Drop">
                     <Grid>
@@ -396,35 +415,25 @@
                                 <Setter Property="Canvas.Left" Value="{Binding X}"/><Setter Property="Canvas.Top" Value="{Binding Y}"/></Style>
                             </ItemsControl.ItemContainerStyle>
                             <ItemsControl.ItemTemplate><DataTemplate>
-                                <Border MouseLeftButtonDown="Screen_MouseDown" MouseLeftButtonUp="Screen_MouseUp" Width="{Binding W}" Height="{Binding H}" Background="{DynamicResource Paper}" BorderBrush="{DynamicResource Ink}" BorderThickness="1.5">
-                                    <Grid>
-                                        <Rectangle x:Name="Strip" Height="4" VerticalAlignment="Top" Fill="{DynamicResource Lime}" Visibility="Collapsed"/>
-                                        <StackPanel Margin="8,12,8,8">
-                                            <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Res}" Style="{StaticResource Mono}" HorizontalAlignment="Left" Margin="0,2,0,0"/>
-                                        </StackPanel>
-                                        <TextBlock x:Name="Role" Text="远端设备" Style="{StaticResource Mono}" VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8"/>
-                                    </Grid>
-                                </Border>
-                                <DataTemplate.Triggers><DataTrigger Binding="{Binding Primary}" Value="True">
-                                    <Setter TargetName="Strip" Property="Visibility" Value="Visible"/><Setter TargetName="Role" Property="Text" Value="本机 · 虚拟桌面"/>
-                                </DataTrigger></DataTemplate.Triggers>
+                                <Grid Width="{Binding SlotW}" Height="{Binding SlotH}">
+                                    <Border Width="{Binding W}" Height="{Binding H}" HorizontalAlignment="Left" VerticalAlignment="Top" MouseLeftButtonDown="Screen_MouseDown" MouseLeftButtonUp="Screen_MouseUp" LostMouseCapture="Screen_LostCapture" Background="{DynamicResource Paper}" BorderBrush="{DynamicResource Ink}" BorderThickness="1.5" Cursor="Hand">
+                                        <Grid ClipToBounds="True">
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                            <TextBlock x:Name="ScreenName" Text="{Binding Name}" FontFamily="Microsoft YaHei" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis" Margin="16,14,16,0"/>
+                                            <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" Margin="20,12"><TextBlock Text="{Binding Res}" FontFamily="Microsoft YaHei" FontSize="38" Foreground="{DynamicResource Ink70}"/></Viewbox>
+                                            <TextBlock Grid.Row="2" Text="{Binding Role}" FontFamily="Microsoft YaHei" FontSize="12" Foreground="{DynamicResource Muted}" Margin="16,0,16,14"/>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                                <DataTemplate.Triggers><DataTrigger Binding="{Binding Primary}" Value="True"><Setter TargetName="ScreenName" Property="Foreground" Value="{DynamicResource LimeDeep}"/></DataTrigger></DataTemplate.Triggers>
                             </DataTemplate></ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Canvas x:Name="Overlay" IsHitTestVisible="False">
-                            <Rectangle x:Name="EdgeZone" Visibility="Collapsed"/>
-                            <Border x:Name="EdgeTag" Visibility="Collapsed" Background="{DynamicResource Ink}" Padding="8,4" CornerRadius="2">
-                                <StackPanel Orientation="Horizontal">
-                                    <Path x:Name="EdgeArrow" Data="{DynamicResource IcoArrow}" Style="{StaticResource IconPath}" Stroke="{DynamicResource Lime}" RenderTransformOrigin="0.5,0.5">
-                                        <Path.RenderTransform><RotateTransform x:Name="ArrowRot"/></Path.RenderTransform></Path>
-                                    <TextBlock x:Name="EdgeText" Margin="8,0,0,0" FontSize="11" Foreground="{DynamicResource Paper}" VerticalAlignment="Center" AutomationProperties.LiveSetting="Polite"/>
-                                </StackPanel>
-                            </Border>
-                        </Canvas>
+                        <Canvas x:Name="LayoutLinks"/>
+                        <Canvas IsHitTestVisible="False"><Rectangle x:Name="DropPreview" Visibility="Collapsed" Stroke="{DynamicResource LimeDeep}" StrokeThickness="2" StrokeDashArray="4,3" Fill="{DynamicResource LimeWash}" Opacity="0.6"/></Canvas>
                     </Grid>
                 </Border>
                 <Grid Grid.Row="1" Margin="0,16,0,0">
-                    <TextBlock Style="{StaticResource Caption}" Text="拖动设备卡片调整左右顺序。文件直接从桌面或资源管理器跨屏拖放，不在此画布发送。每张卡片代表一台电脑的真实虚拟桌面。" MaxWidth="560" HorizontalAlignment="Left"/>
+                    <TextBlock Style="{StaticResource Caption}" Text="拖动屏幕调整位置。" MaxWidth="560" HorizontalAlignment="Left"/>
                     <TextBlock x:Name="ScreenCount" Style="{StaticResource Mono}" HorizontalAlignment="Right" VerticalAlignment="Top"/>
                 </Grid>
             </Grid>

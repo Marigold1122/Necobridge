@@ -5,70 +5,48 @@ using System.Linq;
 using NekoBridge.Core;
 
 namespace NekoBridge.Windows;
-
 public partial class MainWindow
 {
-    private readonly HashSet<Guid> _layoutConnected = new();
-
-    // Called on the dispatcher, before the original RefreshPeers routing/screen projection.
-    private List<Guid> SyncOnPeers(PeerSnapshot[] peers)
+    private readonly HashSet<Guid> _layoutConnected=new();
+    private LayoutCell[] SyncOnPeers(PeerSnapshot[] peers)
     {
-        var connected = peers.Where(p => p.IsConnected).Select(p => p.Id).ToHashSet();
-        var newlyConnected = connected.Except(_layoutConnected).ToArray();
-        _layoutConnected.Clear();
-        _layoutConnected.UnionWith(connected);
-
-        var saved = _state.Settings.Layout;
-        var merged = saved.Where(id => id != Guid.Empty).Distinct().ToList();
-        foreach (var id in peers.Select(p => p.Id).Prepend(_node.LocalId))
-            if (!merged.Contains(id)) merged.Add(id);
-        if (merged.Count > LayoutSync.MaxDevices)
-            throw new InvalidDataException("共享屏幕排列超过 64 台设备，未截断或覆盖原排列。");
-
-        var current = LayoutSync.Read(_state.Settings);
-        bool changed = !saved.SequenceEqual(merged) || !LayoutSync.IsValid(current);
-        if (changed)
+        var connected=peers.Where(p=>p.IsConnected).Select(p=>p.Id).ToHashSet();
+        var newlyConnected=connected.Except(_layoutConnected).ToArray();
+        var current=LayoutSync.Read(_state.Settings);
+        var cells=LayoutSync.Positions(current).ToList();
+        foreach(var id in peers.Select(p=>p.Id).Prepend(_node.LocalId))
+            if(!cells.Any(c=>c.Id==id))cells.Add(new(id,cells.Count==0?0:cells.Max(c=>c.Column)+1,0));
+        if(cells.Count>LayoutSync.MaxDevices)throw new InvalidDataException("共享排列超过64台设备。");
+        if(!LayoutSync.IsValid(current)||current.Cells==null||!cells.SequenceEqual(current.Cells))
         {
-            var snapshot = LayoutSync.Create(_state.Settings, merged);
-            bool orderChanged = !saved.SequenceEqual(merged);
-            LayoutSync.Apply(_state.Settings, snapshot, _state.Save);
-            if (orderChanged) { _router.ReturnLocal(); CancelDrag(); }
-            BroadcastLayout(snapshot);
+            var next=LayoutSync.CreateCells(_state.Settings,cells);
+            bool changed=!LayoutSync.SamePositions(current,next);
+            LayoutSync.Apply(_state.Settings,next,_state.Save);
+            if(changed){_router.ReturnLocal();CancelDrag();}
+            BroadcastLayout(next);
         }
-        else
-            foreach (var peer in newlyConnected) SendObserved(peer, LayoutSync.Encode(current));
-        return _state.Settings.Layout.ToList();
+        else foreach(var id in newlyConnected)SendObserved(id,LayoutSync.Encode(current));
+        _layoutConnected.Clear();_layoutConnected.UnionWith(connected);
+        return _state.Settings.LayoutCells.ToArray();
     }
-
-    // Caller must copy the saved list before applying the existing RemoveAt/Insert drag semantics.
-    private void CommitSharedLayout(IEnumerable<Guid> list)
+    private void CommitSharedLayout(IEnumerable<LayoutCell> cells)
     {
-        var order = list.ToArray();
-        if (_state.Settings.Layout.SequenceEqual(order)) return;
-        var snapshot = LayoutSync.Create(_state.Settings, order);
-        LayoutSync.Apply(_state.Settings, snapshot, _state.Save);
-        _router.ReturnLocal(); CancelDrag();
-        RefreshPeers();
-        BroadcastLayout(snapshot);
+        var snapshot=LayoutSync.CreateCells(_state.Settings,cells);
+        if(LayoutSync.SamePositions(LayoutSync.Read(_state.Settings),snapshot))return;
+        LayoutSync.Apply(_state.Settings,snapshot,_state.Save);
+        _router.ReturnLocal();CancelDrag();RefreshPeers();BroadcastLayout(snapshot);
     }
-
-    private void ReceiveLayout(Guid peer, ControlMessage message)
+    private void ReceiveLayout(Guid peer,ControlMessage message)
     {
-        if (_quitting || !_node.Peers.Any(p => p.Id == peer && p.IsConnected)) return;
-        if (!LayoutSync.TryDecode(message, out var snapshot))
-            throw new InvalidDataException("远端共享屏幕排列无效。");
-        bool orderChanged = !_state.Settings.Layout.SequenceEqual(snapshot.DeviceIds);
-        if (!LayoutSync.Apply(_state.Settings, snapshot, _state.Save)) return;
-        if (orderChanged) { _router.ReturnLocal(); CancelDrag(); }
-        // Relay accepted versions, never back to the source. Duplicate/stale versions stop here.
-        BroadcastLayout(snapshot, peer);
-        RefreshPeers();
+        if(_quitting||!_node.Peers.Any(p=>p.Id==peer&&p.IsConnected))return;
+        if(!LayoutSync.TryDecode(message,out var snapshot))throw new InvalidDataException("远端二维排列无效。");
+        bool changed=!LayoutSync.SamePositions(LayoutSync.Read(_state.Settings),snapshot);
+        if(!LayoutSync.Apply(_state.Settings,snapshot,_state.Save))return;
+        if(changed){_router.ReturnLocal();CancelDrag();}
+        BroadcastLayout(snapshot,peer);RefreshPeers();
     }
-
-    private void BroadcastLayout(LayoutSnapshot snapshot, Guid except = default)
+    private void BroadcastLayout(LayoutSnapshot snapshot,Guid except=default)
     {
-        var message = LayoutSync.Encode(snapshot);
-        foreach (var peer in _node.Peers.Where(p => p.IsConnected && p.Id != except))
-            SendObserved(peer.Id, message);
+        foreach(var peer in _node.Peers.Where(p=>p.IsConnected&&p.Id!=except))SendObserved(peer.Id,LayoutSync.Encode(snapshot));
     }
 }

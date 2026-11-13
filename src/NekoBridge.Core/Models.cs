@@ -17,6 +17,7 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; }
     public List<PeerSettings> Peers { get; set; } = [];
     public List<Guid> Layout { get; set; } = [];
+    public List<LayoutCell> LayoutCells { get; set; } = [];
     public long LayoutRevision { get; set; }
     public Guid LayoutEditor { get; set; }
 }

@@ -140,7 +140,6 @@ public partial class MainWindow : Window
         _pairingTimer.Start();
         Loaded+=(_,_)=>StartNode();
         Closing+=OnClosing;
-        PeerList.SelectionChanged+=(_,_)=>{if(PeerList.SelectedItem is PeerSnapshot peer)JoinAddress.Text=peer.Address;};
         _uiReady=true;InitializeClipboardSettings();RefreshPeers();
         Loaded+=(_,_)=>{NavConn.IsChecked=true;Nav_Checked(NavConn,new RoutedEventArgs());Layout();};
     }
@@ -201,24 +200,22 @@ public partial class MainWindow : Window
     }
     private void RefreshPeers()
     {
-        Guid selected=(PeerList.SelectedItem as PeerSnapshot)?.Id??Guid.Empty;
-        var peers=_node.Peers.ToArray();PeerList.ItemsSource=peers;
-        PeerList.SelectedItem=peers.FirstOrDefault(p=>p.Id==selected)??peers.FirstOrDefault(p=>p.IsConnected);
+        if(_screenDrag!=Guid.Empty)FinishScreenDrag(false);
+        var peers=_node.Peers.ToArray();RefreshPeerCards(peers);
         var saved=SyncOnPeers(peers);
-        var ordered=saved.Where(id=>id==_node.LocalId||peers.Any(p=>p.Id==id&&p.IsConnected)).ToList();
-        _router.SetLayout(ordered);
-        _screens.Clear();double x=0;
-        foreach(var id in ordered)
+        _router.SetLayout(saved);
+        _screens.Clear();
+        foreach(var cell in saved)
         {
-            var peer=peers.FirstOrDefault(p=>p.Id==id);
-            int width=id==_node.LocalId?_router.Width:peer!.Width;
-            int height=id==_node.LocalId?_router.Height:peer!.Height;
-            _screens.Add(new ScreenItem{Id=id,Name=NameOf(id),Primary=id==_node.LocalId,
-                Res=$"{width} × {height}",Px=new Rect(x,0,width,height)});
-            x+=width;
+            var peer=peers.FirstOrDefault(p=>p.Id==cell.Id);
+            if(cell.Id!=_node.LocalId&&peer==null)continue;
+            bool local=cell.Id==_node.LocalId;
+            int width=local?_router.Width:Math.Max(1,peer!.Width),height=local?_router.Height:Math.Max(1,peer!.Height);
+            _screens.Add(new ScreenItem{Id=cell.Id,Name=NameOf(cell.Id),Primary=local,Online=local||peer!.IsConnected,
+                Column=cell.Column,Row=cell.Row,PixelWidth=width,PixelHeight=height,Res=$"{width} × {height}"});
         }
         Screens.ItemsSource=_screens;Layout();
-        ScreenCount.Text=$"{_screens.Count} 台 · 水平排列";
+        ScreenCount.Text=$"{_screens.Count} 台设备";
         RefreshStatus();
     }
     private void RefreshStatus()
@@ -240,24 +237,30 @@ public partial class MainWindow : Window
     private async void Connect_Click(object sender,RoutedEventArgs e)
     {
         if(_connecting||!_started)return;
-        _connecting=true;_connectionSucceeded=false;
+        using var attempt=CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _guideConnectStop=attempt;_connecting=true;_connectionSucceeded=false;
         ConnectionFeedback.Text="正在连接…";RefreshConnectionFlow();
         try
         {
-            await _node.ConnectAsync(JoinAddress.Text.Trim(),JoinCode.Password,_lifetime.Token);
+            await _node.ConnectAsync(JoinAddress.Text.Trim(),JoinCode.Password,attempt.Token);
+            if(!ReferenceEquals(_guideConnectStop,attempt))return;
             JoinCode.Clear();_connectionSucceeded=true;ConnectionFeedback.Text="连接成功。";RefreshPeers();
         }
+        catch(OperationCanceledException)when(attempt.IsCancellationRequested) { }
         catch(Exception ex)
         {
-            ConnectionFeedback.Text=$"连接失败：{ex.Message}";
-            Log(ConnectionFeedback.Text);
+            if(ReferenceEquals(_guideConnectStop,attempt)){ConnectionFeedback.Text=$"连接失败：{ex.Message}";Log(ConnectionFeedback.Text);}
         }
-        finally{_connecting=false;RefreshConnectionFlow();}
+        finally
+        {
+            if(ReferenceEquals(_guideConnectStop,attempt)){_guideConnectStop=null;_connecting=false;if(!_quitting)RefreshConnectionFlow();}
+        }
     }
     private void Pairing_Click(object sender,RoutedEventArgs e)
     {
         _node.PairingEnabled=!_node.PairingEnabled;
         _pairingStarted=_node.PairingEnabled?DateTime.UtcNow:null;
+        _guideOpenedPairing=_node.PairingEnabled;
         PairingCodeText.Text=_node.PairingEnabled?_node.PairingKey:"未开启";
         CardAction.Content=_node.PairingEnabled?"关闭配对":"开启配对";
         RefreshStatus();
@@ -281,33 +284,12 @@ public partial class MainWindow : Window
     private void Pause_Click(object sender,RoutedEventArgs e)=>TogglePause();
     private void TogglePause(){PauseToggle.IsChecked=!(PauseToggle.IsChecked==true);}
     private void ReturnLocal_Click(object sender,RoutedEventArgs e){_router.ReturnLocal();CancelDrag();}
-    private void Screen_MouseDown(object sender,MouseButtonEventArgs e)
-    {
-        if(sender is FrameworkElement element&&element.DataContext is ScreenItem sc)
-        { _screenDrag=sc.Id;element.CaptureMouse();e.Handled=true; }
-    }
-    private void Screen_MouseUp(object sender,MouseButtonEventArgs e)
-    {
-        if(sender is not FrameworkElement element)return;
-        element.ReleaseMouseCapture();
-        Guid dragged=_screenDrag;_screenDrag=Guid.Empty;
-        if(dragged==Guid.Empty)return;
-        double x=e.GetPosition(Stage).X;
-        var target=_screens.FirstOrDefault(sc=>sc.Id!=dragged&&x>=sc.X&&x<=sc.X+sc.W);
-        if(target==null)return;
-        var list=_state.Settings.Layout.ToList();
-        int from=list.IndexOf(dragged),to=list.IndexOf(target.Id);
-        if(from<0||to<0||from==to)return;
-        list.RemoveAt(from);list.Insert(to,dragged);
-        try{CommitSharedLayout(list);}
-        catch(Exception ex){ShowNotice("屏幕排列保存失败",ex.Message,false);}
-        e.Handled=true;
-    }
     private void RemovePeer_Click(object sender,RoutedEventArgs e)
     {
-        if(PeerList.SelectedItem is not PeerSnapshot peer)return;
-        if(!ShowNotice("移除设备",$"移除 {peer.DisplayName} 的信任与连接？再次使用需要重新配对。",true))return;
-        _router.ReturnLocal();CancelDrag();_node.Disconnect(peer.Id,true);RefreshPeers();
+        if(sender is not FrameworkElement{DataContext:PeerCard peer})return;
+        if(_peerRequests.Contains(peer.Id))return;
+        if(!ShowNotice("移除设备",$"移除 {peer.Name} 的信任与连接？再次使用需要重新配对。",true))return;
+        _router.ReturnLocal();CancelDrag();_node.Disconnect(peer.Id,true);_peerCards.Remove(peer.Id);RefreshPeers();
     }
     private void ReceiveControlMessage(Guid peer,ControlMessage message)
     {
@@ -325,7 +307,8 @@ public partial class MainWindow : Window
         {
             switch(m.Kind)
             {
-                case "layout":ReceiveLayout(peer,m);break;
+                case "layout2":ReceiveLayout(peer,m);break;
+                case "layout":Log("排列同步需要两端都更新到 1.01。");break;
                 case "capture2":await CaptureRemoteSource(peer,m);break;
                 case "captured2":case "dragready":case "started2":case "released2":
                     if(_dragReplies.TryGetValue((peer,m.Id,m.Kind),out var reply))reply.TrySetResult(m);

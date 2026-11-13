@@ -51,6 +51,14 @@ foreach(string kind in new[]{"move","key","wheel","button"})
     if(InputRouter.IsLocalTakeover(new PhysicalInput(kind),false))throw new Exception("No owner to take over");
 }
 if(InputRouter.IsLocalTakeover(new PhysicalInput("button",Flags:1),true))throw new Exception("Release-only event stole ownership");
+foreach(bool local in new[]{true,false})
+{
+    var points=new[]{(-1d,50d,NekoBridge.Core.LayoutSide.Left),(101d,50d,NekoBridge.Core.LayoutSide.Right),(50d,-1d,NekoBridge.Core.LayoutSide.Up),(50d,101d,NekoBridge.Core.LayoutSide.Down)};
+    foreach(var (x,y,side) in points)
+        if(InputRouter.DetectSide(x,y,100,100,local)!=side)throw new Exception("Wrong edge: "+side);
+    if(InputRouter.DetectSide(50,50,100,100,local)!=NekoBridge.Core.LayoutSide.None)throw new Exception("Interior crossed");
+}
+Console.WriteLine("PASS local and remote four-direction edge detection");
 Console.WriteLine("PASS local raw UP not replayed, remote release recovery retained, physical move/click/wheel takeover");
 Console.WriteLine("PASS receiver software replay preserves remote ownership; controller injections and real local takeover retained");
 Console.WriteLine("PASS driver injections accepted; NekoBridge self-injection excluded");
