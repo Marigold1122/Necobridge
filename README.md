@@ -1,48 +1,89 @@
 # NekoBridge
 
-面向局域网的多电脑键鼠共享与跨机文件拖放工具。
+一套局域网里的键鼠共享工具：一个键盘、一个鼠标，控制几台并排摆着的电脑，文件也能直接拖过去。
 
-## 当前状态
+![Windows](https://img.shields.io/badge/platform-Windows%20x64-1b2130) ![version](https://img.shields.io/badge/version-1.00-58790f)
 
-已实现 Windows x64 v0.2.3 本地试用版，界面保留连接、屏幕排列、设置。鼠标移动适配 Mouse Without Borders 固定版本的默认算法，取消 v0.2.2 的 RawInput 计数倍率；顶部停放保留。剪贴板改为在线已配对设备间双向纯文本同步、有限重试及去回环。原生跨屏拖放修正 OLE 辅助窗口的启动与消息唤醒。相关来源与 MIT 许可见 THIRD-PARTY-NOTICES.md。
+## 它解决什么问题
 
-验证包含编译、鼠标映射纯运算 smoke、双向剪贴板隔离 smoke，以及真实 Windows Shell 文件数据对象网络读取与临时目录落盘。真实双机不同设备/缩放的手感仍需用户验收，不宣称与所有硬件组合完全等效。原生交互检查仅使用独立临时文件和测试窗口，不处理用户文件。
+桌上有三四台电脑，每台插一套键鼠既不现实，切来切去也麻烦。NekoBridge 让鼠标从屏幕边缘滑到下一台电脑，键盘跟着当前鼠标所在的那台走。想要把文件从 A 拖到 C，直接拖过去就行，不用先传到共享文件夹。
 
-分发目录：artifacts/NekoBridge-0.2.3-win-x64/；运行 NekoBridge.exe。ZIP：artifacts/NekoBridge-0.2.3-win-x64.zip。完整使用说明见 [docs/使用说明.md](docs/使用说明.md)。
+参与者可以任意组合，不要求固定某台电脑做主机。
 
-## 范围
+## 功能
 
-- 第一版：Windows，目标为 4～5 台已配对电脑。
-- 鼠标按屏幕布局跨边缘切换电脑，键盘跟随当前控制目标。
-- 文件来源不局限于键鼠所在主机：可以操作 B，将 B 的文件拖到 C。
-- 目标体验：桌面及资源管理器之间，文件、多选文件和文件夹跨机拖放，默认复制。
-- 后续考虑 macOS，其他系统不在范围内。
+**键鼠共享**
+鼠标从左右最外边缘穿到相邻电脑，键盘自动跟随。按实际摆放顺序排列屏幕，方向就不会错。紧急情况下 `Ctrl+Alt+Home` 一键回到本机。
 
-## 技术边界
+**跨屏拖放文件**
+在桌面或资源管理器里按住文件、多选文件、整个文件夹，拖到屏幕边缘，继续拖进另一台电脑的资源管理器目录松手，文件就复制过去了。默认复制，不会删除源文件。支持 A 控制 B 时从 B 拖到 C。
 
-选择 C# + .NET 10 LTS；Windows 设置界面采用 WPF。
+**剪贴板同步**
+文字、图片、文件都能跨机复制粘贴。文件粘贴时按需从来源电脑读取，不占中转服务器的空间——本来也没有服务器，全在局域网内。
 
-- 通用核心负责配对、协议、屏幕布局、控制权状态和传输任务，不依赖 Windows UI 或系统句柄。
-- Windows 适配负责原生键鼠、剪贴板、Shell/OLE 拖放及系统权限。
-- WPF 只负责 Windows 界面。未来 macOS 的系统适配及界面另行实现，复用已验证的协议和适用核心。
-- 不为将来可能的功能提前建立空项目、空接口或伪实现。
-- UI 设计调用仅在开发过程中发生，不进入产品运行链路。
+**剪贴板历史**
+`Alt+V` 呼出，可以搜索、按类型筛选、收藏。历史存在本地，重启后还在。上限、快捷键和记录哪些类型，都可以在设置里改。
 
-## 最先需要验证的风险
+**安全**
+配对需要对方显示的随机密钥，连接走 TLS。未配对的设备不能控制你。会话按键在断线时自动释放，不会卡住不放。
 
-成熟键鼠共享项目不等于已经解决任意跨机拖放。先用两台 Windows 验证从资源管理器拾取文件、跨屏交接拖放、落入目标资源管理器目录的完整链路，再验证多选与文件夹。不能将“发送文件到接收窗口”当成跨资源管理器拖放完成。
+## 开始使用
 
-现有 Mouse Without Borders 的文件传输存在功能限制；不能承诺直接复用就满足全部需求。安装、服务模式、管理员窗口及安全桌面需要分别确定支持范围，不默认承诺覆盖。
+1. 下载 [最新版](https://github.com/Marigold1122/Necobridge/releases/latest)，完整解压到每台电脑上。**别只单独拿出 exe**，程序依赖同目录的运行时文件。
+2. 双击 `NekoBridge.exe`。Windows 防火墙询问时，允许**专用网络**。
+3. 在要连接的那台电脑上选「被控端」，点「开启配对」，记下显示的地址和密钥。
+4. 在插着键鼠的电脑上选「控制端」，填入对方的地址和密钥，连接。
+5. 打开「屏幕排列」，把设备卡片拖成桌面上真实的位置，比如从左到右是 A、B、C。
 
-## 开发环境
+之后正常用鼠标，移到屏幕边缘就会换台电脑。
 
-工程本地已安装并通过官方 SHA-512 校验的 .NET 10.0.404 SDK，路径为 .tools/dotnet；未替换全局 SDK。scripts/build.ps1 编译，scripts/publish.ps1 生成包含运行时的 Windows x64 分发目录和 ZIP。tools/CoreSmoke 为小范围回环检查，tools/smoke-windows.ps1 为真实桌面交互 smoke，均不进入产品分发包。
+> 所有参与连接的电脑要用同一个版本。升级前先从托盘退出旧程序，再运行新版；已配对信息会自动保留。
+
+## 界面
+
+窗口关掉后程序留在系统托盘，右键图标可以暂停共享、打开剪贴板历史或退出。
+
+- **连接**：首次配对引导；已配对设备的重连和管理。
+- **屏幕排列**：拖卡片调整左右顺序，任何一台电脑上改，其他电脑同步。
+- **设置**：剪贴板和开机启动等选项。
+
+## 已知限制
+
+- 目前只有 **Windows x64** 版本，macOS 尚未支持。
+- 每台电脑的多个显示器被当作一整块虚拟桌面，还不支持任意二维拼接。
+- 无法控制 UAC 安全桌面、登录界面或管理员权限窗口，这是系统限制。
+- 游戏、反作弊软件、独占输入的软件以及远程桌面嵌套场景不做保证。
+- 不支持符号链接、回收站、手机设备、压缩包内部对象这类虚拟 Shell 项目。
+- 跨屏拖放依赖 Windows 原生拖放，目标程序失败时可能已经产生部分文件，请以资源管理器里的实际结果为准。
+- 拖动文件时，目标端要先准备好文件清单，大文件第一次会有等待，不是瞬间完成。
+- 本版在不同 DPI、不同分辨率和系统托盘交互上仍在收集反馈，遇到问题欢迎提 issue。
+
+## 从源码构建
+
+需要 .NET 10 SDK。
+
+```powershell
+# 编译
+.\scripts\build.ps1
+
+# 生成自包含的 Windows x64 分发目录和压缩包
+.\scripts\publish.ps1
+```
+
+工程结构：
+
+```
+src/NekoBridge.Core      配对、协议、屏幕布局、输入状态等通用逻辑，不依赖 Windows UI
+src/NekoBridge.Windows   Windows 端的键鼠钩子、剪贴板、原生拖放和 WPF 界面
+tools/                   小范围回环检查与发布辅助脚本
+```
+
+界面使用 C# + WPF。通用核心不引用 WPF 或 Win32 句柄，Windows 相关能力都集中在系统适配层。
 
 ## 参考
 
-- [PowerToys Mouse Without Borders 源码](https://github.com/microsoft/PowerToys/tree/main/src/modules/MouseWithoutBorders)
-- [Mouse Without Borders 官方说明与限制](https://learn.microsoft.com/en-us/windows/powertoys/mouse-without-borders)
-- [Windows Shell 拖放](https://learn.microsoft.com/en-us/windows/win32/shell/dragdrop)
-- [.NET 发布与支持信息](https://github.com/dotnet/core)
+- [PowerToys Mouse Without Borders](https://github.com/microsoft/PowerToys/tree/main/src/modules/MouseWithoutBorders) — 键鼠共享的主要参考实现
+- [Windows Shell 拖放](https://learn.microsoft.com/en-us/windows/win32/shell/dragdrop) — 原生拖放用到的接口
+- [.NET 发布与支持](https://github.com/dotnet/core)
 
-开发和外观调用约束见 AGENTS.md。
+第三方代码与素材的来源和许可证见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
