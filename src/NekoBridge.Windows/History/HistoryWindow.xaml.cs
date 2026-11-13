@@ -15,6 +15,7 @@ public partial class HistoryWindow:Window
     internal HistoryWindow(HistoryStore store,HistoryBridge bridge,NekoBridge.Core.AppSettings settings,Action persist,Func<string,Task> setHotkey,System.Threading.CancellationToken lifetime)
     {
         InitializeComponent();
+        _=new HistoryWheelScroll(ClipList);
         _model=new HistoryViewModel(store,bridge,settings,persist,setHotkey,Finish,Error,Confirm,lifetime);
         Closing+=(_,args)=>{if(!lifetime.IsCancellationRequested){args.Cancel=true;Hide();}};
         DataContext=_model;

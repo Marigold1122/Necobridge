@@ -9,7 +9,7 @@
     <AssemblyName>NekoBridge</AssemblyName>
     <RootNamespace>NekoBridge.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.3.4</Version>
+    <Version>0.3.11</Version>
     <!-- WPF owns startup; process DPI awareness is declared in app.manifest. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <ApplicationIcon>Assets/nekobridge.ico</ApplicationIcon>
@@ -18,6 +18,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
     <ProjectReference Include="../NekoBridge.Core/NekoBridge.Core.csproj" />
     <Resource Include="Assets/4955775.png" />
+    <Resource Include="Assets/logo.png" />
     <Resource Include="Assets/nekobridge.ico" />
   </ItemGroup>
 </Project>

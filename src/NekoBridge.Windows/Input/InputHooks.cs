@@ -41,6 +41,7 @@ internal sealed class InputHooks : IDisposable
             _mouse=NativeMethods.SetWindowsHookEx(14,_mouseCallback,NativeMethods.GetModuleHandle(null),0);
             _keyboard=NativeMethods.SetWindowsHookEx(13,_keyCallback,NativeMethods.GetModuleHandle(null),0);
             if(_mouse==0 || _keyboard==0) throw new Win32Exception(Marshal.GetLastWin32Error(),"无法注册键鼠钩子");
+            using var recovery=new MouseButtonRecovery(button=>_handle(new PhysicalInput("rawButtonUp",Data:button,Flags:1)),_log);
             _ready.TrySetResult();
             Forms.Application.Run();
         }

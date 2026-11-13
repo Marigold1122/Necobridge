@@ -79,6 +79,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Loaded+=(_,_)=>UpdateDeviceWallpaper();
+        Activated+=(_,_)=>UpdateDeviceWallpaper();
         _state=new LocalState();_listeningPort=_state.Settings.Port;
         _node=new BridgeNode(_state.Settings,_state.Identity,_state.Save);
         _router=new InputRouter(_node,Log);
@@ -89,7 +91,7 @@ public partial class MainWindow : Window
         _historyBridge=new HistoryBridge(_clipboard,_historyStore,_node,Log,kind=>_state.Settings.ClipboardHistoryEnabled&&(kind switch {"image"=>_state.Settings.ClipboardHistoryCaptureImages,"files"=>_state.Settings.ClipboardHistoryCaptureFiles,_=>true}));
         _node.Log+=Log;
         _node.PeersChanged+=()=>UI(RefreshPeers);
-        _node.MessageReceived+=(peer,message)=>UI(()=>HandleMessage(peer,message));
+        _node.MessageReceived+=ReceiveControlMessage;
         _node.TransferProgress+=(peer,progress)=>UI(()=>OnProgress(progress));
         _router.EdgeCrossing+=(from,to,x,y,left)=>UI(()=>CrossEdge(from,to,x,y,left));
         _router.ActiveChanged+=id=>UI(RefreshStatus);
@@ -293,6 +295,16 @@ public partial class MainWindow : Window
         if(PeerList.SelectedItem is not PeerSnapshot peer)return;
         if(!ShowNotice("移除设备",$"移除 {peer.DisplayName} 的信任与连接？再次使用需要重新配对。",true))return;
         _router.ReturnLocal();CancelDrag();_node.Disconnect(peer.Id,true);RefreshPeers();
+    }
+    private void ReceiveControlMessage(Guid peer,ControlMessage message)
+    {
+        if(message.Kind is "enter" or "leave" or "move" or "key" or "button" or "wheel" or "keepalive" or "yield")
+        {
+            if(_quitting)return;
+            try{_router.Accept(peer,message);}
+            catch(Exception ex){DragDiagnostics.Failure("input-"+message.Kind,ex);Log($"远端输入失败 [{message.Kind}, 0x{ex.HResult:X8}]：{ex.Message}");}
+        }
+        else UI(()=>HandleMessage(peer,message));
     }
     private async void HandleMessage(Guid peer,ControlMessage m)
     {
@@ -616,6 +628,7 @@ public partial class MainWindow : Window
     private nint WindowMessages(nint hwnd,int message,nint wParam,nint lParam,ref bool handled)
     {
         if(message==0x31D)_clipboard.HandleClipboardUpdate();
+        if(message==0x1A)UI(UpdateDeviceWallpaper);
         return 0;
     }
     private bool ShowNotice(string title,string text,bool confirm)

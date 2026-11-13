@@ -40,7 +40,9 @@ internal sealed class InputRouter : IDisposable
     private bool _reportedReceiverReplay;
     private (Guid Peer,ControlMessage Message)? _move;
     private long _lastKeepAlive;
-    private long _switchAfter;
+    private readonly CursorParking _parking;
+    private Guid _parkController;
+    private DateTime _parkHeartbeat;
     internal event Action<Guid,Guid,int,int,bool>? EdgeCrossing;
     internal event Action<Guid>? ActiveChanged;
     internal event Action<bool>? RemoteLeftChanged;
@@ -59,6 +61,7 @@ internal sealed class InputRouter : IDisposable
     internal InputRouter(BridgeNode node,Action<string> log)
     {
         _node=node;_log=log;_active=node.LocalId;
+        _parking=new CursorParking(log);
         _hooks=new InputHooks(HandlePhysical,log);
         _sender=Task.Run(SendLoopAsync);
         _timer=new System.Threading.Timer(Tick,null,8,8);
@@ -84,6 +87,14 @@ internal sealed class InputRouter : IDisposable
     {
         lock(_gate)
         {
+            if(_disposed)return false;
+            if(e.Kind=="rawButtonUp")
+            {
+                if(!_physicalButtons.Contains(e.Data))return false;
+                // Raw Input can arrive before or after LL UP; the held set deduplicates both.
+                e=e with {Kind="button"};
+                if(_active==_node.LocalId&&_owner==Guid.Empty)InjectButton(e.Data,true);
+            }
             // Receiver-side gesture tools may replay our input with a different marker.
             if(IsReceiverReplay(e,_owner!=Guid.Empty))
             {
@@ -106,7 +117,7 @@ internal sealed class InputRouter : IDisposable
             }
             if(e.Kind=="button")
             {
-                if(e.Flags==0)_physicalButtons.Add(e.Data);else _physicalButtons.Remove(e.Data);
+                if(e.Flags==0)_physicalButtons.Add(e.Data);else if(!_physicalButtons.Remove(e.Data))return _active!=_node.LocalId;
                 if(e.Data==1)
                 {
                     _leftDown=e.Flags==0;
@@ -115,6 +126,7 @@ internal sealed class InputRouter : IDisposable
                 }
             }
             if(_paused)return false;
+            if(_parkController!=Guid.Empty && !e.SourceInjected)RestoreParking();
             if(_owner!=Guid.Empty)
             {
                 if(e.Kind=="move" || e.Kind=="key" || (e.Kind=="button"&&e.Flags==0))
@@ -127,7 +139,7 @@ internal sealed class InputRouter : IDisposable
             if(_dragStarting&&e.Kind=="move")return true;
             if(_active==_node.LocalId)
             {
-                if(e.Kind=="move"&&!_edgePending&&!_dragCrossingBlocked&&Environment.TickCount64>_switchAfter)
+                if(e.Kind=="move"&&!_edgePending&&!_dragCrossingBlocked)
                 {
                     int direction=e.X<=Left ? -1:e.X>=Left+Width-1 ? 1:0;
                     if(direction!=0)
@@ -139,7 +151,8 @@ internal sealed class InputRouter : IDisposable
                             var size=Size(next);
                             int nx=direction>0?Math.Min(2,size.W-1):Math.Max(0,size.W-3);
                             int ny=MapVertical(e.Y-Top,Height,size.H);
-                            EdgeCrossing?.Invoke(_active,next,nx,ny,_leftDown);
+                            if(_leftDown)EdgeCrossing?.Invoke(_active,next,nx,ny,true);
+                            else {CompleteCrossing(next,nx,ny);return true;}
                         }
                     }
                 }
@@ -163,14 +176,17 @@ internal sealed class InputRouter : IDisposable
                 double nextX=_x+NormalizePointerDelta((double)e.X-parked.X,Width,_targetWidth);
                 _y=Math.Clamp(_y+NormalizePointerDelta((double)e.Y-parked.Y,Height,_targetHeight),0,_targetHeight-1);
                 int direction=nextX<0?-1:nextX>_targetWidth-1?1:0;
-                if(direction!=0&&!_edgePending&&!_dragCrossingBlocked&&Environment.TickCount64>_switchAfter)
+                if(direction!=0&&!_edgePending&&!_dragCrossingBlocked)
                 {
                     Guid next=Neighbor(direction);
                     if(next!=Guid.Empty)
                     {
                         _edgePending=true;
                         var ns=Size(next);
-                        EdgeCrossing?.Invoke(_active,next,direction>0?Math.Min(2,ns.W-1):Math.Max(0,ns.W-3),MapVertical(_y,_targetHeight,ns.H),_leftDown);
+                        int nx=direction>0?Math.Min(2,ns.W-1):Math.Max(0,ns.W-3);
+                        int ny=MapVertical(_y,_targetHeight,ns.H);
+                        if(_leftDown)EdgeCrossing?.Invoke(_active,next,nx,ny,true);
+                        else {CompleteCrossing(next,nx,ny);return true;}
                     }
                 }
                 _x=Math.Clamp(nextX,0,_targetWidth-1);
@@ -216,9 +232,10 @@ internal sealed class InputRouter : IDisposable
             }
             (_targetWidth,_targetHeight)=Size(target);
             _dragStarting=nativeDrag;
-            _active=target;_x=x;_y=y;_edgePending=false;_switchAfter=Environment.TickCount64+300;
+            _active=target;_x=x;_y=y;_edgePending=false;
             if(target==_node.LocalId)
             {
+                RestoreParking();
                 NativeMethods.MoveCursor(Left+x,Top+y);
                 _localReturnPoint=null;
                 foreach(var key in _physicalKeys)NativeMethods.InjectKey(key.Key,key.Value.Scan,false,key.Value.Extended);
@@ -237,21 +254,25 @@ internal sealed class InputRouter : IDisposable
     }
     private void ParkCursor()
     {
-        var topScreen=System.Windows.Forms.Screen.AllScreens.OrderBy(s=>s.Bounds.Top).ThenByDescending(s=>s.Primary).FirstOrDefault();
-        if(topScreen is null)return;
-        var bounds=topScreen.Bounds;
-        try{NativeMethods.MoveCursor(bounds.Left+bounds.Width/2,bounds.Top+Math.Min(4,bounds.Height-1));}
-        catch(System.ComponentModel.Win32Exception ex){_log($"无法停放光标：{ex.Message}");}
+        var screen=System.Windows.Forms.Screen.AllScreens.OrderBy(s=>s.Bounds.Top).ThenByDescending(s=>s.Primary).FirstOrDefault();
+        if(screen is null)return;
+        var bounds=screen.Bounds;
+        int x=bounds.Left+bounds.Width/2,y=bounds.Top;
+        _parking.Show(x,y);
+        try{NativeMethods.MoveCursor(x,y);}
+        catch(System.ComponentModel.Win32Exception ex){RestoreParking();_log($"无法停放光标：{ex.Message}");}
     }
+    private void RestoreParking(){_parkController=Guid.Empty;_parking.Hide();}
     internal void DragStarted(){lock(_gate)_dragStarting=false;}
-    internal void CancelCrossing(){lock(_gate){_generation++;_edgePending=false;_dragStarting=false;_dragCrossingBlocked=_leftDown;_switchAfter=Environment.TickCount64+500;}}
+    internal void CancelCrossing(){lock(_gate){_generation++;_edgePending=false;_dragStarting=false;_dragCrossingBlocked=_leftDown;}}
     internal void ReturnLocal(){lock(_gate)ReturnLocalLocked();}
     private void ReturnLocalLocked(bool notifyPeer=true)
     {
         _generation++;
+        RestoreParking();
         bool returning=_active!=_node.LocalId;
         if(returning&&notifyPeer)_outbox.Writer.TryWrite((_active,new ControlMessage{Kind="leave"}));
-        _active=_node.LocalId;_edgePending=false;_dragStarting=false;_move=null;_dragCrossingBlocked=_leftDown;_switchAfter=Environment.TickCount64+500;
+        _active=_node.LocalId;_edgePending=false;_dragStarting=false;_move=null;_dragCrossingBlocked=_leftDown;
         CancelDragRequested?.Invoke();
         if(returning&&_localReturnPoint is {} point)
         {
@@ -273,11 +294,13 @@ internal sealed class InputRouter : IDisposable
         {
             if(m.Kind=="yield") { if(_active==peer)ReturnLocalLocked(); return; }
             if(_paused)return;
+            if(m.Kind=="keepalive"&&_parkController==peer){_parkHeartbeat=DateTime.UtcNow;return;}
             if(m.Kind=="enter")
             {
                 if(_owner!=Guid.Empty&&_owner!=peer) {Queue(peer,new ControlMessage{Kind="yield"});return;}
                 if(_active!=_node.LocalId)ReturnLocalLocked();
                 if(_owner!=peer)_reportedReceiverReplay=false;
+                RestoreParking();
                 _owner=peer;_lastIncoming=DateTime.UtcNow;
                 NativeMethods.MoveCursor(Left+Math.Clamp(m.X,0,Width-1),Top+Math.Clamp(m.Y,0,Height-1));
                 return;
@@ -289,7 +312,8 @@ internal sealed class InputRouter : IDisposable
                 case "keepalive":break;
                 case "leave":
                     CancelDragRequested?.Invoke();ReleaseReceivedLocked();_owner=Guid.Empty;
-                    if(m.Flags==1)ParkCursor();
+                    if(m.Flags==1){_parkController=peer;_parkHeartbeat=DateTime.UtcNow;ParkCursor();}
+                    else RestoreParking();
                     break;
                 case "move":NativeMethods.MoveCursor(Left+Math.Clamp(m.X,0,Width-1),Top+Math.Clamp(m.Y,0,Height-1));break;
                 case "key":
@@ -338,10 +362,16 @@ internal sealed class InputRouter : IDisposable
             if(_disposed)return;
             FlushMoveLocked();
             long now=Environment.TickCount64;
-            if(_active!=_node.LocalId&&now-_lastKeepAlive>400){Queue(_active,new ControlMessage{Kind="keepalive"});_lastKeepAlive=now;}
-            if(_owner!=Guid.Empty&&(DateTime.UtcNow-_lastIncoming).TotalSeconds>2)
+            if(_active!=_node.LocalId&&now-_lastKeepAlive>400)
             {
-                CancelDragRequested?.Invoke();ReleaseReceivedLocked();_owner=Guid.Empty;_log("输入心跳超时，已释放所有远端按键。");
+                foreach(var peer in _node.Peers.Where(p=>p.IsConnected))Queue(peer.Id,new ControlMessage{Kind="keepalive"});
+                _lastKeepAlive=now;
+            }
+            if(_parkController!=Guid.Empty&&((DateTime.UtcNow-_parkHeartbeat).TotalSeconds>2||!_node.Peers.Any(p=>p.Id==_parkController&&p.IsConnected)))RestoreParking();
+            if(_active!=_node.LocalId&&!_node.Peers.Any(p=>p.Id==_active&&p.IsConnected))ReturnLocalLocked();
+            if(_owner!=Guid.Empty&&((DateTime.UtcNow-_lastIncoming).TotalSeconds>2||!_node.Peers.Any(p=>p.Id==_owner&&p.IsConnected)))
+            {
+                CancelDragRequested?.Invoke();ReleaseReceivedLocked();_owner=Guid.Empty;RestoreParking();_log("输入心跳超时，已释放所有远端按键。");
             }
         }
     }
@@ -365,7 +395,7 @@ internal sealed class InputRouter : IDisposable
     public void Dispose()
     {
         lock(_gate){if(_disposed)return;ReturnLocalLocked();ReleaseReceivedLocked();_disposed=true;}
-        _timer.Dispose();_hooks.Dispose();_outbox.Writer.TryComplete();
+        _timer.Dispose();_hooks.Dispose();_parking.Dispose();_outbox.Writer.TryComplete();
         _stop.Cancel();
         try{_sender.GetAwaiter().GetResult();}catch(OperationCanceledException){}
         _stop.Dispose();

@@ -1,7 +1,7 @@
 <Window x:Class="NekoBridge.Windows.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="NekoBridge" Height="744" Width="1136" MinHeight="624" MinWidth="960"
+        Title="NekoBridge" Icon="/NekoBridge;component/Assets/nekobridge.ico" Height="744" Width="1136" MinHeight="624" MinWidth="960"
         WindowStyle="None" WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Paper}" UseLayoutRounding="True" SnapsToDevicePixels="True"
         FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI" TextOptions.TextFormattingMode="Ideal"
@@ -156,9 +156,9 @@
             <Grid Margin="24,0,0,0">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="216"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Rectangle Width="8" Height="8" Fill="{DynamicResource Lime}" Stroke="{DynamicResource Ink}" StrokeThickness="1"/>
+                    <Image Source="/NekoBridge;component/Assets/logo.png" Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock Text="NekoBridge" Margin="8,0,0,0" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
-                    <TextBlock Text="0.3.4" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
+                    <TextBlock Text="0.3.11 重建" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="32,0,0,0" VerticalAlignment="Center">
                     <Ellipse x:Name="StateDot" Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Muted}"/>
@@ -208,7 +208,7 @@
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <Border Height="160" Margin="24,24,24,24" CornerRadius="2" BorderThickness="1" BorderBrush="{DynamicResource Line}">
                     <Border.Background>
-                        <ImageBrush ImageSource="Assets/4955775.png" Stretch="UniformToFill" Viewbox="0.18,0.06,0.5,0.62" ViewboxUnits="RelativeToBoundingBox"/>
+                        <ImageBrush x:Name="DeviceWallpaper" Stretch="UniformToFill"/>
                     </Border.Background>
                     <Border VerticalAlignment="Bottom" Background="{DynamicResource Paper}" Padding="8,8">
                         <StackPanel>
