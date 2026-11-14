@@ -83,24 +83,45 @@ internal sealed class InputRouter : IDisposable
     {
         lock(_gate){_paused=value;if(value){ReturnLocalLocked();ReleaseReceivedLocked();_owner=Guid.Empty;}}
     }
+    internal static bool IsParkedReplay(PhysicalInput input,bool parked)
+        => parked&&input.SourceInjected&&input.Kind=="move";
+
     internal static bool IsReceiverReplay(PhysicalInput input,bool hasRemoteOwner)
         => hasRemoteOwner && input.SourceInjected;
 
     internal static bool IsLocalTakeover(PhysicalInput input,bool hasRemoteOwner)
         => hasRemoteOwner&&!input.SourceInjected
            &&(input.Kind is "move" or "key" or "wheel" || input.Kind=="button"&&input.Flags==0);
-    internal static bool ShouldRecoverRawRelease(bool forwardingToRemote)=>forwardingToRemote;
+    internal static bool RecordButton(HashSet<int> held,int button,bool up)
+        => up?held.Remove(button):held.Add(button);
+
+    private void ObserveLeftButton(PhysicalInput input)
+    {
+        if(input.Data!=1)return;
+        _leftDown=input.Flags==0;
+        if(!_leftDown)_dragCrossingBlocked=false;
+        PhysicalLeftChanged?.Invoke(_leftDown);
+    }
 
     private bool HandlePhysical(PhysicalInput e)
     {
         lock(_gate)
         {
             if(_disposed)return false;
+            // A receiver has no remote owner after leave, but must still reject
+            // software-replayed moves until a real local input or enter restores it.
+            // Our own marked parking/enter injections bypass this hook entirely.
+            if(IsParkedReplay(e,_parkController!=Guid.Empty))return true;
             if(e.Kind=="rawButtonUp")
             {
-                // Local Windows already receives the physical UP. Replaying it
-                // from Raw Input duplicates releases and can dismiss tray flyouts.
-                if(!ShouldRecoverRawRelease(_active!=_node.LocalId))return false;
+                // Raw UP is authoritative for held-state bookkeeping even when
+                // a gesture hook consumed the ordinary UP. Local delivery must
+                // not inject a second UP into Windows.
+                if(_active==_node.LocalId)
+                {
+                    if(RecordButton(_physicalButtons,e.Data,true))ObserveLeftButton(e);
+                    return false;
+                }
                 if(!_physicalButtons.Contains(e.Data))return false;
                 e=e with {Kind="button"};
             }
@@ -139,16 +160,15 @@ internal sealed class InputRouter : IDisposable
             }
             if(e.Kind=="button")
             {
-                if(e.Flags==0)_physicalButtons.Add(e.Data);else if(!_physicalButtons.Remove(e.Data))return _active!=_node.LocalId;
-                if(e.Data==1)
-                {
-                    _leftDown=e.Flags==0;
-                    if(!_leftDown)_dragCrossingBlocked=false;
-                    PhysicalLeftChanged?.Invoke(_leftDown);
-                }
+                bool changed=RecordButton(_physicalButtons,e.Data,e.Flags!=0);
+                if(e.Flags!=0&&!changed)return _active!=_node.LocalId;
+                ObserveLeftButton(e);
             }
             if(_paused)return false;
-            if(_parkController!=Guid.Empty && !e.SourceInjected)RestoreParking();
+            if(_parkController!=Guid.Empty && !e.SourceInjected)
+            {
+                _log($"光标隐藏结束：本机输入 {e.Kind}。");RestoreParking();
+            }
             if(_dragStarting&&e.Kind=="move")return true;
             if(_active==_node.LocalId)
             {
@@ -313,6 +333,7 @@ internal sealed class InputRouter : IDisposable
                 case "leave":
                     CancelDragRequested?.Invoke();ReleaseReceivedLocked();_owner=Guid.Empty;
                     _parkController=peer;_parkHeartbeat=DateTime.UtcNow;ParkCursor();
+                    _log("收到离开消息：被控端进入光标隐藏状态。");
                     break;
                 case "move":NativeMethods.MoveCursor(Left+Math.Clamp(m.X,0,Width-1),Top+Math.Clamp(m.Y,0,Height-1));break;
                 case "key":

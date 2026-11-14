@@ -42,8 +42,7 @@ foreach(string kind in new[]{"move","button","key","emergency"})
     if(InputRouter.IsReceiverReplay(replay,false))throw new Exception($"Controller driver input rejected: {kind}");
     if(InputRouter.IsReceiverReplay(new PhysicalInput(kind),true))throw new Exception($"Physical local takeover rejected: {kind}");
 }
-if(InputRouter.ShouldRecoverRawRelease(false))throw new Exception("Local physical UP must not be replayed");
-if(!InputRouter.ShouldRecoverRawRelease(true))throw new Exception("Remote raw release recovery lost");
+
 foreach(string kind in new[]{"move","key","wheel","button"})
 {
     if(!InputRouter.IsLocalTakeover(new PhysicalInput(kind),true))throw new Exception("Physical takeover missing: "+kind);
@@ -63,3 +62,28 @@ Console.WriteLine("PASS local raw UP not replayed, remote release recovery retai
 Console.WriteLine("PASS receiver software replay preserves remote ownership; controller injections and real local takeover retained");
 Console.WriteLine("PASS driver injections accepted; NekoBridge self-injection excluded");
 Console.WriteLine("InputSmoke passed: MWB default absolute mapping, axis independence, bidirectional resolutions, fractional accumulation. No physical input exercised.");
+
+foreach(int dx in new[]{-1,0,1})
+foreach(int dy in new[]{-1,0,1})
+    if(!CursorParking.ContainsParkedPoint(100,4,100+dx,4+dy))throw new Exception("Rounded park point escaped shield");
+if(CursorParking.ContainsParkedPoint(100,4,120,4))throw new Exception("Real movement mistaken for parked point");
+if(!InputRouter.IsParkedReplay(new PhysicalInput("move",SourceInjected:true),true))throw new Exception("Parked receiver accepts software move");
+if(InputRouter.IsParkedReplay(new PhysicalInput("move"),true))throw new Exception("Parked receiver blocks real local mouse");
+if(InputRouter.IsParkedReplay(new PhysicalInput("move",SourceInjected:true),false))throw new Exception("Active receiver blocks software replay");
+Console.WriteLine("PASS centered parking shield rounding and parked receiver replay isolation; physical takeover retained");
+
+// Same state transition used by local Raw UP and ordinary LL button events.
+foreach(bool clickLeftAfterWheel in new[]{false,true})
+{
+    var held=new System.Collections.Generic.HashSet<int>();
+    InputRouter.RecordButton(held,2,false);
+    InputRouter.RecordButton(held,2,true); // hardware Raw UP; ordinary UP consumed
+    if(clickLeftAfterWheel){InputRouter.RecordButton(held,1,false);InputRouter.RecordButton(held,1,true);}
+    for(int crossing=0;crossing<4;crossing++)
+        if(held.Contains(2))throw new Exception("Released source right button replayed across screens");
+}
+var pressed=new System.Collections.Generic.HashSet<int>();
+InputRouter.RecordButton(pressed,2,false);
+if(!pressed.Contains(2))throw new Exception("Real held right button lost");
+if(!InputRouter.RecordButton(pressed,2,true)||InputRouter.RecordButton(pressed,2,true))throw new Exception("Raw/LL release deduplication failed");
+Console.WriteLine("PASS wheel consumed UP, with/without later left click, held right and Raw/LL release deduplication");

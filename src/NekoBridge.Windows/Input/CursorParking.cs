@@ -17,6 +17,12 @@ internal sealed class CursorParking : IDisposable
     private bool _visible,_disposed;
     private int _x,_y;
 
+    // SendInput absolute-coordinate normalization may round one pixel away.
+    // Keep the requested point inside a centered hit-test shield on both axes.
+    internal static bool ContainsParkedPoint(int x,int y,int actualX,int actualY)
+        => (long)actualX>= (long)x-4 && (long)actualX<(long)x+5
+        && (long)actualY>= (long)y-4 && (long)actualY<(long)y+5;
+
     internal CursorParking(Action<string> log)
     {
         _log=log;
@@ -79,18 +85,18 @@ internal sealed class CursorParking : IDisposable
     {
         internal ParkingWindow()
         {
-            CreateHandle(new Forms.CreateParams{Caption="NekoBridge cursor parking",Style=unchecked((int)0x80000000),ExStyle=0x08080088,Width=3,Height=3});
+            CreateHandle(new Forms.CreateParams{Caption="NekoBridge cursor parking",Style=unchecked((int)0x80000000),ExStyle=0x08080088,Width=9,Height=9});
             if(!SetLayeredWindowAttributes(Handle,0,1,2))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         }
         internal void ShowAt(int x,int y)
         {
-            if(!SetWindowPos(Handle,new nint(-1),x-1,y,3,3,0x0050))
+            if(!SetWindowPos(Handle,new nint(-1),x-4,y-4,9,9,0x0050))
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
             // The initial move can precede this asynchronous window. Replay a
             // zero-distance move only while still parked to refresh hit testing
             // without pulling the cursor back after a rapid return/remote enter.
             if(NativeMethods.GetCursorPos(out var point)
-                && point.X>=x-1&&point.X<x+2&&point.Y>=y&&point.Y<y+3)
+                && ContainsParkedPoint(x,y,point.X,point.Y))
             {
                 NativeMethods.InjectMouse(0,0,1);
                 SetCursor(0);
@@ -106,7 +112,7 @@ internal sealed class CursorParking : IDisposable
             if(m.Msg==0x20){SetCursor(0);m.Result=1;return;}
             if(m.Msg==0x21){m.Result=4;return;}
             if(m.Msg==0x84){m.Result=1;return;}
-            if(m.Msg==0x14){PatBlt(m.WParam,0,0,3,3,0x00000042);m.Result=1;return;}
+            if(m.Msg==0x14){PatBlt(m.WParam,0,0,9,9,0x00000042);m.Result=1;return;}
             base.WndProc(ref m);
         }
         public void Dispose(){Hide();DestroyHandle();}
