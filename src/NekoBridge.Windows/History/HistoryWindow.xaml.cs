@@ -19,6 +19,20 @@ public partial class HistoryWindow:Window
         _model=new HistoryViewModel(store,bridge,clipboardSettings,Finish,Error,Confirm,lifetime);
         Closing+=(_,args)=>{if(!lifetime.IsCancellationRequested){args.Cancel=true;Hide();}};
         DataContext=_model;
+        HistoryVersionText.Text=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)??"";
+    }
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var source=System.Windows.Interop.HwndSource.FromHwnd(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        source?.AddHook(PanelWindowMessages);
+    }
+    private nint PanelWindowMessages(nint hwnd,int message,nint wParam,nint lParam,ref bool handled)
+    {
+        // The quick panel remains edge-resizable, but has no minimize/maximize
+        // action (including the caption double-click and system commands).
+        if(message==0x00A3 || message==0x0112&&((wParam.ToInt64()&0xFFF0) is 0xF020 or 0xF030))handled=true;
+        return 0;
     }
     internal async Task OpenAsync(bool settings=false)
     {
@@ -26,7 +40,26 @@ public partial class HistoryWindow:Window
         _model.CancelRecording();
         _model.IsSettingsOpen=settings;
         await _model.RefreshAsync();
+        if(WindowState==WindowState.Minimized)WindowState=WindowState.Normal;
+        // Restore onto a current monitor before showing a reused hidden window.
+        if(WindowState==WindowState.Normal)
+        {
+            Width=Math.Max(MinWidth,Width);Height=Math.Max(MinHeight,Height);
+            var area=System.Windows.Forms.Screen.FromHandle(new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle()).WorkingArea;
+            var transform=System.Windows.PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice??System.Windows.Media.Matrix.Identity;
+            var topLeft=transform.Transform(new Point(area.Left,area.Top));var bottomRight=transform.Transform(new Point(area.Right,area.Bottom));
+            if(!double.IsNaN(Left))Left=Math.Clamp(Left,topLeft.X,Math.Max(topLeft.X,bottomRight.X-Width));
+            if(!double.IsNaN(Top))Top=Math.Clamp(Top,topLeft.Y,Math.Max(topLeft.Y,bottomRight.Y-Height));
+        }
         Show();Activate();ClipList.Focus();
+    }
+    private async void OnHistoryScrollChanged(object sender,ScrollChangedEventArgs e)
+    {
+        if(e.OriginalSource is not ScrollViewer viewer||viewer.ViewportHeight<=0)return;
+        if(viewer.ScrollableHeight-viewer.VerticalOffset>160)return;
+        try{await _model.LoadMoreAsync();}
+        catch(OperationCanceledException) { }
+        catch(Exception ex){Error(ex.Message);}
     }
     private Task Finish()
     {
@@ -50,11 +83,6 @@ public partial class HistoryWindow:Window
     {
         var command=_model.IsSettingsOpen?_model.CloseSettingsCommand:_model.OpenSettingsCommand;
         command.Execute(null);
-    }
-    private void OnMinimizeClick(object sender,RoutedEventArgs e)=>SystemCommands.MinimizeWindow(this);
-    private void OnMaximizeClick(object sender,RoutedEventArgs e)
-    {
-        if(WindowState==WindowState.Maximized)SystemCommands.RestoreWindow(this);else SystemCommands.MaximizeWindow(this);
     }
     private void OnHotkeyRecorderKeyDown(object sender,KeyEventArgs e)
     {
@@ -88,7 +116,7 @@ public partial class HistoryWindow:Window
         else if(e.Key==Key.S&&Keyboard.Modifiers==ModifierKeys.Control)command=_model.SaveCopyCommand;
         if(command!=null){e.Handled=true;command.Execute(null);}
     }
-    private void OnWindowDeactivated(object? sender,EventArgs e){if(!_dialog&&!_model.Busy&&!_model.IsSettingsOpen)Hide();}
+    private void OnWindowDeactivated(object? sender,EventArgs e){if(!_dialog&&!_model.Busy)Hide();}
     private void OnWindowDrag(object sender,MouseButtonEventArgs e)
     {
         if(e.OriginalSource is System.Windows.DependencyObject origin)

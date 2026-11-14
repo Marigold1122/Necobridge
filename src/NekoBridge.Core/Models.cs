@@ -15,6 +15,7 @@ public sealed class AppSettings
     public int ClipboardHistoryMaxItems { get; set; } = 1000;
     public long ClipboardHistoryMaxBytes { get; set; } = 512L*1024*1024;
     public bool StartWithWindows { get; set; }
+    public bool DarkTheme { get; set; }
     public List<PeerSettings> Peers { get; set; } = [];
     public List<Guid> Layout { get; set; } = [];
     public List<LayoutCell> LayoutCells { get; set; } = [];

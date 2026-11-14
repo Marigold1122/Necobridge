@@ -8,6 +8,12 @@ namespace NekoBridge.Windows;
 
 public partial class App : Application
 {
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
+        var app=new App();app.InitializeComponent();app.Run();
+    }
     private Mutex? _single;
     protected override void OnStartup(StartupEventArgs e)
     {

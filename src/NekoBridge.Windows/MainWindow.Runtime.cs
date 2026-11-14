@@ -93,7 +93,7 @@ public partial class MainWindow : Window
         _node.Log+=Log;
         _node.PeersChanged+=()=>UI(RefreshPeers);
         _node.MessageReceived+=ReceiveControlMessage;
-        _node.TransferProgress+=(peer,progress)=>UI(()=>OnProgress(progress));
+        _node.TransferProgress+=(peer,progress)=>UI(()=>{TrackUpdateTransfer(peer,progress);OnProgress(progress);});
         _router.EdgeCrossing+=(from,to,x,y,left)=>UI(()=>CrossEdge(from,to,x,y,left));
         _router.ActiveChanged+=id=>UI(RefreshStatus);
         _router.RemoteLeftChanged+=down=>
@@ -126,6 +126,8 @@ public partial class MainWindow : Window
         LocalPairingAddress.Text=SideIp.Text;
         FootLeft.Text=$"{_state.Settings.DeviceName} · 端口 {_listeningPort}";
         StartWithWindowsCheck.IsChecked=_state.Settings.StartWithWindows;
+        DarkCheck.IsChecked=_state.Settings.DarkTheme;
+        ApplyTheme(_state.Settings.DarkTheme);
         _tray=new Forms.NotifyIcon{Text="NekoBridge · 局域网键鼠共享",Icon=new System.Drawing.Icon(Application.GetResourceStream(new Uri("pack://application:,,,/Assets/nekobridge.ico")).Stream),Visible=true};
         var menu=new Forms.ContextMenuStrip();
         menu.Items.Add("显示 NekoBridge",null,(_,_)=>UI(ShowWindow));
@@ -141,6 +143,7 @@ public partial class MainWindow : Window
         Loaded+=(_,_)=>StartNode();
         Closing+=OnClosing;
         _uiReady=true;InitializeClipboardSettings();RefreshPeers();
+        _=CheckUpdatesAsync();
         Loaded+=(_,_)=>{NavConn.IsChecked=true;Nav_Checked(NavConn,new RoutedEventArgs());Layout();};
     }
     internal void InitializeInBackground()=>StartNode();

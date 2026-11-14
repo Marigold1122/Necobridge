@@ -158,7 +158,7 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Image Source="/NekoBridge;component/Assets/logo.png" Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock Text="NekoBridge" Margin="8,0,0,0" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
-                    <TextBlock Text="1.1.2" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
+                    <TextBlock Text="1.2.3" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="32,0,0,0" VerticalAlignment="Center">
                     <Ellipse x:Name="StateDot" Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Muted}"/>
@@ -439,7 +439,7 @@
             </Grid>
 
             <!-- 03 设置 -->
-            <Grid x:Name="PanelSet" Grid.Row="1" Visibility="Collapsed">
+            <ScrollViewer x:Name="PanelSet" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid>
                 <Grid.ColumnDefinitions><ColumnDefinition Width="5*" MinWidth="280"/><ColumnDefinition Width="32"/><ColumnDefinition Width="4*" MinWidth="240"/></Grid.ColumnDefinitions>
                 <StackPanel>
                     <StackPanel AutomationProperties.Name="文件与剪贴板">
@@ -448,20 +448,35 @@
                         <CheckBox x:Name="HistoryEnabledCheck" AutomationProperties.AutomationId="HistoryEnabledCheck" Style="{StaticResource Square}" Content="记录剪贴板历史" IsChecked="{Binding ClipboardSettings.HistoryEnabled, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
                         <TextBlock Text="历史快捷键" Style="{StaticResource Caption}"/>
                         <Button x:Name="ClipboardHotkeyButton" AutomationProperties.AutomationId="ClipboardHotkeyButton" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,16" Content="{Binding ClipboardSettings.HotkeyText, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Click="Hotkey_Click" PreviewKeyDown="Hotkey_KeyDown" LostKeyboardFocus="ClipboardHotkey_LostFocus"/>
-                        <TextBlock Text="历史条数上限（0 表示不限条数）" Style="{StaticResource Caption}"/>
+                        <TextBlock Text="本机历史保留条数（0 表示不限条数）" Style="{StaticResource Caption}"/>
                         <TextBox x:Name="MaxItemsBox" AutomationProperties.AutomationId="MaxItemsBox" Text="{Binding ClipboardSettings.MaxItems, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" HorizontalAlignment="Left" Width="120" Margin="0,8,0,16" PreviewTextInput="MaxItems_PreviewTextInput" DataObject.Pasting="MaxItems_Pasting" LostKeyboardFocus="MaxItems_LostFocus"/>
                         <CheckBox x:Name="RecordImagesCheck" AutomationProperties.AutomationId="RecordImagesCheck" Style="{StaticResource Square}" Content="记录图片" IsChecked="{Binding ClipboardSettings.CaptureImages, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
                         <CheckBox x:Name="RecordFilesCheck" AutomationProperties.AutomationId="RecordFilesCheck" Style="{StaticResource Square}" Content="记录文件" IsChecked="{Binding ClipboardSettings.CaptureFiles, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
-                        <TextBlock Style="{StaticResource Caption}" Text="桌面与资源管理器原生拖放；默认复制，不删除源文件。"/>
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="2" AutomationProperties.Name="外观与系统">
                     <TextBlock Text="外观与系统" Style="{StaticResource Section}"/>
                     <CheckBox x:Name="DarkCheck" AutomationProperties.AutomationId="DarkCheck" Style="{StaticResource Square}" Content="深色主题" Checked="Theme_Changed" Unchecked="Theme_Changed"/>
                     <CheckBox x:Name="StartWithWindowsCheck" AutomationProperties.AutomationId="StartWithWindowsCheck" Style="{StaticResource Square}" Content="开机时启动" Checked="Startup_Changed" Unchecked="Startup_Changed"/>
-                    <TextBlock Text="剪贴板与开机启动即时保存。深色主题仅本次窗口生效。" Style="{StaticResource Caption}"/>
+                    <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Margin="0,28,0,0" Padding="0,22,0,0">
+                        <StackPanel>
+                            <TextBlock Text="软件更新" Style="{StaticResource Section}"/>
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="UpdateVersionText" Text="当前版本 1.2.3" FontSize="12" Foreground="{DynamicResource Ink70}" VerticalAlignment="Center"/>
+                                <Button x:Name="UpdateCheckButton" Grid.Column="1" Style="{StaticResource Primary}" Content="检查更新" Click="UpdateCheck_Click"/>
+                            </Grid>
+                            <TextBlock x:Name="UpdateStatusText" Text="尚未检查" Style="{StaticResource Caption}" Foreground="{DynamicResource Ink70}" Margin="0,14,0,0" AutomationProperties.LiveSetting="Polite"/>
+                            <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto" Margin="0,10,0,0"><TextBlock x:Name="UpdateNotesText" TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource Ink70}"/></ScrollViewer>
+                            <ProgressBar x:Name="UpdateProgress" Visibility="Collapsed" Height="3" Minimum="0" Maximum="100" Foreground="{DynamicResource LimeDeep}" Background="{DynamicResource Paper2}" BorderThickness="0" Margin="0,12,0,0"/>
+                            <WrapPanel Margin="0,12,0,0">
+                                <Button x:Name="UpdateDownloadButton" Visibility="Collapsed" Style="{StaticResource Primary}" Content="下载更新" Click="UpdateDownload_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="UpdateRestartButton" Visibility="Collapsed" Style="{StaticResource Primary}" Content="重启并更新" Click="UpdateRestart_Click" Margin="0,0,8,8"/>
+                                <Button Style="{StaticResource Primary}" Content="发布页 ↗" Click="UpdateReleasePage_Click" Margin="0,0,0,8"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Grid>
+            </Grid></ScrollViewer>
         </Grid>
 
         <!-- 状态栏：传输内置于此 -->

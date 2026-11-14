@@ -42,8 +42,9 @@ internal sealed class HistoryViewModel:ObservableModel
     private bool _settingsOpen;
     private bool _hasMore;
     private int _loaded;
+    private bool _loadingPage;
+    private int _refreshing;
     public bool HasMore{get=>_hasMore;private set{_hasMore=value;Changed();}}
-    public ICommand LoadMoreCommand{get;}
     private HistoryItem? _selected;
     private readonly System.Collections.Generic.List<HistoryCommand> _commands=[];
     internal bool Busy{get;private set;}
@@ -96,7 +97,6 @@ internal sealed class HistoryViewModel:ObservableModel
         BeginRecordingCommand=Command(_=>{Recording=true;HotkeyText="按下组合键…";return Task.CompletedTask;});
         ClearAllCommand=Command(async _=>{if(!_confirm("清空本机全部剪贴板历史（包括收藏和离线副本）？不会清空其他电脑或删除来源文件。"))return;await _store.ClearAsync(true,lifetime);await RefreshAsync();});
         CopyCommand=Command(p=>Restore(p as HistoryItem));
-        LoadMoreCommand=Command(_=>LoadPageAsync(false));
         SaveCopyCommand=Command(async p=>{if((p as HistoryItem??SelectedItem) is not {} item)return;if(item.Entry.Kind!="files"){_error("文字和图片已持久保存；只有文件记录需要另存离线副本。");return;}await _bridge.SaveFileCopyAsync(item.Entry,lifetime);await RefreshAsync();});
         DeleteCommand=Command(async p=>{if((p as HistoryItem??SelectedItem) is not {} item)return;await _store.RemoveAsync(item.Id,lifetime);await RefreshAsync();});
         ToggleFavoriteCommand=Command(async p=>{if((p as HistoryItem??SelectedItem) is not {} item)return;await _store.SetFavoriteAsync(item.Id,!item.IsFavorite,lifetime);await RefreshAsync();});
@@ -119,7 +119,17 @@ internal sealed class HistoryViewModel:ObservableModel
         await _bridge.RestoreAsync(item.Entry,_lifetime);await _close();
     }
     private async void RefreshObserved(){try{await RefreshAsync();}catch(OperationCanceledException){}catch(Exception ex){_error(ex.Message);}}
-    internal Task RefreshAsync()=>LoadPageAsync(true);
+    internal async Task RefreshAsync()
+    {
+        _refreshing++;
+        try{await LoadPageAsync(true);}finally{_refreshing--;}
+    }
+    internal async Task LoadMoreAsync()
+    {
+        if(Busy||_refreshing>0||_loadingPage||!HasMore)return;
+        _loadingPage=true;
+        try{await LoadPageAsync(false);}finally{_loadingPage=false;}
+    }
     private async Task LoadPageAsync(bool reset)
     {
         long query=reset?++_query:_query;
@@ -144,7 +154,13 @@ internal sealed class HistoryViewModel:ObservableModel
         if(reset)Items.Clear();
         foreach(var item in loaded)if(!Items.Any(i=>i.Id==item.Id))Items.Add(item);
         _loaded=offset+entries.Count;HasMore=entries.Count==100;
-        ApplyFilter();SelectedItem=FilteredItems.FirstOrDefault(i=>i.Id==selected)??FilteredItems.FirstOrDefault();
+        if(reset)ApplyFilter();
+        else
+        {
+            foreach(var item in loaded)if(!FilteredItems.Any(i=>i.Id==item.Id))FilteredItems.Add(item);
+            Changed(nameof(IsEmpty));Changed(nameof(IsFilteredEmpty));
+        }
+        SelectedItem=FilteredItems.FirstOrDefault(i=>i.Id==selected)??FilteredItems.FirstOrDefault();
     }
     private void ApplyFilter()
     {

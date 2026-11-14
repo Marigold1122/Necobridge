@@ -54,7 +54,24 @@ namespace NekoBridge.Windows
             Layout();
         }
 
-        void Theme_Changed(object sender, RoutedEventArgs e) => ApplyTheme(DarkCheck.IsChecked == true);
+        void Theme_Changed(object sender, RoutedEventArgs e)
+        {
+            if(!_uiReady)return;
+            bool previous=_state.Settings.DarkTheme;
+            try
+            {
+                _state.Settings.DarkTheme=DarkCheck.IsChecked==true;
+                _state.Save();ApplyTheme(_state.Settings.DarkTheme);
+            }
+            catch(Exception ex)
+            {
+                _state.Settings.DarkTheme=previous;
+                _uiReady=false;
+                try{DarkCheck.IsChecked=previous;ApplyTheme(previous);}
+                finally{_uiReady=true;}
+                ShowNotice("主题保存失败",ex.Message,false);
+            }
+        }
 
         void ApplyTheme(bool dark)
         {
