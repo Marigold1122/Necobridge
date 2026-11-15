@@ -15,7 +15,8 @@ internal sealed class LocalState
     internal X509Certificate2 Identity {get;}
     internal LocalState(string? directory=null)
     {
-        DirectoryPath=directory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"NekoBridge");
+        DirectoryPath=directory??NekoBridge.Storage.DataLocation.Resolve();
+        NekoBridge.Storage.DataLocation.EnsureNoLinks(DirectoryPath);
         Directory.CreateDirectory(DirectoryPath);
         string file=Path.Combine(DirectoryPath,"settings.json");
         Settings=File.Exists(file)?JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(file))??throw new InvalidDataException("配置文件为空"):new AppSettings();

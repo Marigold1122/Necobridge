@@ -36,9 +36,18 @@ public partial class App : Application
     }
     internal static void LogFailure(Exception ex)
     {
-        string directory=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"NekoBridge");
-        Directory.CreateDirectory(directory);
-        File.AppendAllText(Path.Combine(directory,"errors.log"),$"{DateTimeOffset.Now:O} {ex}\n");
+        try
+        {
+            string directory=NekoBridge.Storage.DataLocation.Resolve();
+            Directory.CreateDirectory(directory);
+            File.AppendAllText(Path.Combine(directory,"errors.log"),$"{DateTimeOffset.Now:O} {ex}\n");
+        }
+        catch(Exception loggingError)
+        {
+            // Logging must not replace the original startup error if the
+            // selected data drive is unavailable. Never switch data silently.
+            System.Diagnostics.Trace.WriteLine(loggingError);
+        }
     }
     protected override void OnExit(ExitEventArgs e)
     {

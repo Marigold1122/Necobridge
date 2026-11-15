@@ -43,7 +43,9 @@
 
 ## 安装说明
 
-去 [Releases](https://github.com/Marigold1122/Necobridge/releases/latest) 页面下载 `NekoBridge-1.1.0-win-x64.zip`，解压到任意文件夹后运行 `NekoBridge.exe` 即可。压缩包内已经内置了 .NET 运行时，无需额外安装环境。注意不要只把 `.exe` 单独拎出来运行，请保持整个文件夹结构完整。
+去 [Releases](https://github.com/Marigold1122/Necobridge/releases/latest) 页面选择安装版 `NekoBridge-win-Setup.exe` 或便携版 `NekoBridge-win-Portable.zip`，两个只需下载一个。包内已经包含 .NET 运行时，无需额外安装环境。便携版请完整解压后运行 `NekoBridge.exe`，不要只取出 EXE。
+
+从 1.3.0 起，安装版先显示安装向导，程序目录和数据目录可以分别选择。已有数据默认继续保留在原位置；改到新的空目录时，会复制配置和历史，安装成功后再切换。原数据不会自动删除，程序目录与数据目录不能相同或互相包含。
 
 请确保所有互相连接的电脑使用相同版本的 NekoBridge。升级版本时，先从右下角系统托盘退出旧版，再启动新版即可，之前的配对信息会直接保留。
 

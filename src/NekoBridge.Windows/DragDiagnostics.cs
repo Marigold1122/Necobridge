@@ -15,7 +15,7 @@ internal static class DragDiagnostics
         {
             try
             {
-                string directory=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"NekoBridge");
+                string directory=NekoBridge.Storage.DataLocation.Resolve();
                 Directory.CreateDirectory(directory);
                 string path=Path.Combine(directory,"drag-diagnostics.log");
                 if(File.Exists(path)&&new FileInfo(path).Length>262144)File.Move(path,path+".previous",true);
