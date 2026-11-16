@@ -53,7 +53,13 @@ internal sealed class CursorParking : IDisposable
         // SendInput may wait for the hook; never hold _gate while injecting.
         if(visible)
         {
-            try{_window!.ShowAt(x,y);}
+            try
+            {
+                _window!.ShowAt(x,y,()=>
+                {
+                    lock(_gate)return generation==_generation&&_visible&&!_disposed;
+                });
+            }
             catch(System.ComponentModel.Win32Exception ex)
             {
                 _window!.Hide();
@@ -81,6 +87,21 @@ internal sealed class CursorParking : IDisposable
     }
     public void Dispose(){lock(_gate){if(_disposed)return;_disposed=true;PostLocked();}}
 
+    // Must run on the window's own GUI thread. Never release a different
+    // window's capture, and never activate/focus the hider to acquire it.
+    internal static void AcquireParkingCapture(nint window)
+    {
+        NativeMethods.SetCapture(window);
+        if(GetCapture()!=window)
+            throw new System.ComponentModel.Win32Exception("系统未将鼠标捕获交给光标停放窗口。");
+    }
+    internal static void ReleaseParkingCapture(nint window)
+    {
+        if(GetCapture()==window&&!NativeMethods.ReleaseCapture())
+            throw new System.ComponentModel.Win32Exception("系统未释放光标停放窗口的鼠标捕获。");
+    }
+    [DllImport("user32.dll")] private static extern nint GetCapture();
+
     private sealed class ParkingWindow : Forms.NativeWindow,IDisposable
     {
         internal ParkingWindow()
@@ -88,22 +109,26 @@ internal sealed class CursorParking : IDisposable
             CreateHandle(new Forms.CreateParams{Caption="NekoBridge cursor parking",Style=unchecked((int)0x80000000),ExStyle=0x08080088,Width=9,Height=9});
             if(!SetLayeredWindowAttributes(Handle,0,1,2))throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         }
-        internal void ShowAt(int x,int y)
+        internal void ShowAt(int x,int y,Func<bool> isCurrent)
         {
             if(!SetWindowPos(Handle,new nint(-1),x-4,y-4,9,9,0x0050))
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-            // The initial move can precede this asynchronous window. Replay a
-            // zero-distance move only while still parked to refresh hit testing
-            // without pulling the cursor back after a rapid return/remote enter.
-            if(NativeMethods.GetCursorPos(out var point)
+            // Refresh hit testing only while still inside the parked shield;
+            // never pull back a cursor restored by rapid reentry/local takeover.
+            if(isCurrent()&&NativeMethods.GetCursorPos(out var point)
                 && ContainsParkedPoint(x,y,point.X,point.Y))
             {
-                NativeMethods.InjectMouse(0,0,1);
+                // Deskflow's secondary-screen hider explicitly owns capture.
+                // An overlay/hit test alone is not an input ownership handoff.
+                AcquireParkingCapture(Handle);
+                if(!isCurrent()){ReleaseParkingCapture(Handle);return;}
+                NativeMethods.InjectMouse(0,0,0x2001);
                 SetCursor(0);
             }
         }
         internal void Hide()
         {
+            ReleaseParkingCapture(Handle);
             ShowWindow(Handle,0);
             SetCursor(LoadCursor(0,new nint(32512)));
         }

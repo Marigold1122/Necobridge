@@ -65,7 +65,7 @@ internal sealed class InputRouter : IDisposable
         _parking=new CursorParking(log);
         _hooks=new InputHooks(HandlePhysical,log);
         _sender=Task.Run(SendLoopAsync);
-        _timer=new System.Threading.Timer(Tick,null,8,8);
+        _timer=new System.Threading.Timer(Tick,null,100,100);
     }
     internal void SetLayout(IEnumerable<Guid> layout)=>SetLayout(layout.Select((id,i)=>new LayoutCell(id,i,0)));
     internal void SetLayout(IEnumerable<LayoutCell> layout)
@@ -75,7 +75,7 @@ internal sealed class InputRouter : IDisposable
             var cells=layout.ToArray();
             if(!LayoutSync.ValidCells(cells)||!cells.Any(c=>c.Id==_node.LocalId))throw new ArgumentException("本机屏幕位置无效。");
             _cells=cells;
-            _layout=cells.Where(c=>c.Id==_node.LocalId||_node.Peers.Any(p=>p.Id==c.Id&&p.IsConnected)).Select(c=>c.Id).ToArray();
+            _layout=cells.Where(c=>c.Id==_node.LocalId||_node.IsConnected(c.Id)).Select(c=>c.Id).ToArray();
             if(!_layout.Contains(_active))ReturnLocalLocked();
         }
     }
@@ -253,6 +253,7 @@ internal sealed class InputRouter : IDisposable
             (_targetWidth,_targetHeight)=Size(target);
             _dragStarting=nativeDrag;
             _active=target;_x=x;_y=y;_edgePending=false;
+            int interval=target==_node.LocalId?100:8;_timer.Change(interval,interval);
             if(target==_node.LocalId)
             {
                 RestoreParking();
@@ -293,6 +294,7 @@ internal sealed class InputRouter : IDisposable
         bool returning=_active!=_node.LocalId;
         if(returning&&notifyPeer)_outbox.Writer.TryWrite((_active,new ControlMessage{Kind="leave"}));
         _active=_node.LocalId;_edgePending=false;_dragStarting=false;_move=null;_dragCrossingBlocked=_leftDown;
+        _timer.Change(100,100);
         CancelDragRequested?.Invoke();
         if(returning&&_localReturnPoint is {} point)
         {
@@ -384,12 +386,12 @@ internal sealed class InputRouter : IDisposable
             long now=Environment.TickCount64;
             if(!_paused&&now-_lastKeepAlive>400)
             {
-                foreach(var peer in _node.Peers.Where(p=>p.IsConnected))Queue(peer.Id,new ControlMessage{Kind="keepalive"});
+                foreach(var id in _layout)if(id!=_node.LocalId&&_node.IsConnected(id))Queue(id,new ControlMessage{Kind="keepalive"});
                 _lastKeepAlive=now;
             }
-            if(_parkController!=Guid.Empty&&((DateTime.UtcNow-_parkHeartbeat).TotalSeconds>2||!_node.Peers.Any(p=>p.Id==_parkController&&p.IsConnected)))RestoreParking();
-            if(_active!=_node.LocalId&&!_node.Peers.Any(p=>p.Id==_active&&p.IsConnected))ReturnLocalLocked();
-            if(_owner!=Guid.Empty&&((DateTime.UtcNow-_lastIncoming).TotalSeconds>2||!_node.Peers.Any(p=>p.Id==_owner&&p.IsConnected)))
+            if(_parkController!=Guid.Empty&&((DateTime.UtcNow-_parkHeartbeat).TotalSeconds>2||!_node.IsConnected(_parkController)))RestoreParking();
+            if(_active!=_node.LocalId&&!_node.IsConnected(_active))ReturnLocalLocked();
+            if(_owner!=Guid.Empty&&((DateTime.UtcNow-_lastIncoming).TotalSeconds>2||!_node.IsConnected(_owner)))
             {
                 CancelDragRequested?.Invoke();ReleaseReceivedLocked();_owner=Guid.Empty;RestoreParking();_log("输入心跳超时，已释放所有远端按键。");
             }

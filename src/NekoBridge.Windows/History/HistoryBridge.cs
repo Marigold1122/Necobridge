@@ -66,7 +66,10 @@ public sealed class HistoryBridge : IDisposable
         catch { log("剪贴板历史记录保存失败。"); }
     }
     public async Task RestoreAsync(HistoryEntry entry, CancellationToken token = default)
-        => await clipboard.RestoreHistoryAsync(entry, entry.Kind == "image" ? await store.ReadImageAsync(entry.Id, token) : null, token);
+    {
+        var complete=await store.GetAsync(entry.Id,token)??throw new IOException("记录已被清理，请刷新历史列表。");
+        await clipboard.RestoreHistoryAsync(complete,complete.Kind=="image"?await store.ReadImageAsync(complete.Id,token):null,token);
+    }
 
     // Explicit user action only: never eagerly download clipboard file offers.
     public Task<string[]> SaveFileCopyAsync(HistoryEntry entry, CancellationToken token = default)

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+ <ItemGroup>
+  <ProjectReference Include="../../src/NekoBridge.Windows/NekoBridge.Windows.csproj"/>
+  <Compile Include="../../src/NekoBridge.Core/Wire.cs" Link="Wire.cs"/>
+  <Compile Include="../../src/NekoBridge.Windows/History/HistoryThumbnail.cs" Link="HistoryThumbnail.cs"/>
+ </ItemGroup>
+</Project>

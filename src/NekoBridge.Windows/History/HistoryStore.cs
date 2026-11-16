@@ -30,6 +30,7 @@ public sealed class HistoryStore : IDisposable
     private readonly string _copies;
     private HistoryRetention _retention;
     private bool _disposed;
+    private bool _filesNeedSweep=true;
 
     public HistoryStore(string directory, HistoryRetention? retention = null)
     {
@@ -71,13 +72,22 @@ public sealed class HistoryStore : IDisposable
         SearchPageAsync(query, favoritesOnly, null, limit, 0, cancellationToken);
 
     // Retention count and page size are independent; even unlimited history is read in bounded pages.
-    public Task<IReadOnlyList<HistoryEntry>> SearchPageAsync(string? query = null, bool favoritesOnly = false, string? kind = null, int limit = 100, int offset = 0, CancellationToken cancellationToken = default) => Run<IReadOnlyList<HistoryEntry>>(() =>
+    public Task<IReadOnlyList<HistoryEntry>> SearchPageAsync(string? query = null, bool favoritesOnly = false, string? kind = null, int limit = 100, int offset = 0, CancellationToken cancellationToken = default) =>
+        SearchPageCoreAsync(query,favoritesOnly,kind,limit,offset,false,cancellationToken);
+
+    // List rows only display a short preview. Copying fetches the full record by
+    // ID so opening a page of long texts need not hold megabytes of hidden text.
+    internal Task<IReadOnlyList<HistoryEntry>> SearchPreviewPageAsync(string? query,bool favoritesOnly,string? kind,int limit,int offset,CancellationToken cancellationToken) =>
+        SearchPageCoreAsync(query,favoritesOnly,kind,limit,offset,true,cancellationToken);
+
+    private Task<IReadOnlyList<HistoryEntry>> SearchPageCoreAsync(string? query,bool favoritesOnly,string? kind,int limit,int offset,bool preview,CancellationToken cancellationToken) => Run<IReadOnlyList<HistoryEntry>>(() =>
     {
         if (limit is < 1 or > 1000 || query?.Length > 4096) throw new ArgumentOutOfRangeException(nameof(limit));
         if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
         if (kind is not (null or "text" or "image" or "files")) throw new ArgumentOutOfRangeException(nameof(kind));
         PruneCore();
-        using var command = Command("SELECT * FROM history WHERE ($f=0 OR favorite=1) AND ($kind IS NULL OR kind=$kind) AND search LIKE $q ESCAPE '!' ORDER BY favorite DESC,copied DESC,id ASC LIMIT $n OFFSET $offset",
+        string columns=preview?"id,digest,kind,source,source_name,substr(text,1,256),paths,offer,summary,created,copied,favorite,bytes,image,NULL,saved":"*";
+        using var command = Command("SELECT "+columns+" FROM history WHERE ($f=0 OR favorite=1) AND ($kind IS NULL OR kind=$kind) AND search LIKE $q ESCAPE '!' ORDER BY favorite DESC,copied DESC,id ASC LIMIT $n OFFSET $offset",
             ("$f", favoritesOnly ? 1 : 0), ("$kind", kind), ("$q", "%" + (query ?? "").Replace("!", "!!").Replace("%", "!%").Replace("_", "!_") + "%"), ("$n", limit), ("$offset", offset));
         using var reader = command.ExecuteReader();
         var entries = new List<HistoryEntry>();
@@ -91,16 +101,26 @@ public sealed class HistoryStore : IDisposable
         using var command = Command("SELECT image FROM history WHERE id=$id", ("$id", id.ToString()));
         return command.ExecuteScalar() is string name ? File.ReadAllBytes(ImagePath(name)) : null;
     }, cancellationToken);
+    // Decode a preview directly from the file while the store protects it from
+    // pruning. The caller returns a detached/frozen result, never a live stream.
+    internal Task<T?> ReadImageFileAsync<T>(Guid id,Func<Stream,T> read,CancellationToken cancellationToken=default) where T:class => Run(() =>
+    {
+        using var command=Command("SELECT image FROM history WHERE id=$id",("$id",id.ToString()));
+        if(command.ExecuteScalar() is not string name)return null;
+        using var stream=File.OpenRead(ImagePath(name));
+        return read(stream);
+    },cancellationToken);
+
     public Task SetFavoriteAsync(Guid id, bool favorite, CancellationToken cancellationToken = default) => Run(() =>
     {
         if (Execute("UPDATE history SET favorite=$f WHERE id=$id", ("$f", favorite ? 1 : 0), ("$id", id.ToString())) == 0) throw new KeyNotFoundException("History entry no longer exists.");
         return true;
     }, cancellationToken);
     public Task RemoveAsync(Guid id, CancellationToken cancellationToken = default) => Run(() =>
-    { Execute("DELETE FROM history WHERE id=$id", ("$id", id.ToString())); SweepImages(); return true; }, cancellationToken);
+    { Execute("DELETE FROM history WHERE id=$id", ("$id", id.ToString())); _filesNeedSweep=true; SweepIfNeeded(); return true; }, cancellationToken);
     public Task ClearAsync(bool includeFavorites = true, CancellationToken cancellationToken = default) => Run(() =>
-    { Execute("DELETE FROM history WHERE $all=1 OR favorite=0", ("$all", includeFavorites ? 1 : 0)); SweepImages(); Execute("PRAGMA wal_checkpoint(TRUNCATE)"); return true; }, cancellationToken);
-    public Task PruneAsync(CancellationToken cancellationToken = default) => Run(() => { PruneCore(); return true; }, cancellationToken);
+    { Execute("DELETE FROM history WHERE $all=1 OR favorite=0", ("$all", includeFavorites ? 1 : 0)); _filesNeedSweep=true; SweepIfNeeded(); Execute("PRAGMA wal_checkpoint(TRUNCATE)"); return true; }, cancellationToken);
+    public Task PruneAsync(CancellationToken cancellationToken = default) => Run(() => { _filesNeedSweep=true; PruneCore(); return true; }, cancellationToken);
 
     private static void ValidateRetention(HistoryRetention retention)
     {
@@ -156,8 +176,8 @@ public sealed class HistoryStore : IDisposable
             using var transaction = _db.BeginTransaction();
             using (var command = Command("UPDATE history SET saved=$p,bytes=bytes+$b WHERE id=$id", ("$p", JsonSerializer.Serialize(snapshot)), ("$b", actual), ("$id", id.ToString())))
             { command.Transaction = transaction; command.ExecuteNonQuery(); }
-            Trim(transaction, id); transaction.Commit();
-            SweepImages(); return true;
+            bool removed=Trim(transaction, id); transaction.Commit();
+            _filesNeedSweep|=removed;SweepIfNeeded();return true;
         }, cancellationToken);
     }
 
@@ -192,6 +212,7 @@ public sealed class HistoryStore : IDisposable
         if (bytes > _retention.MaxStoredBytes) throw new IOException("History storage capacity exceeded.");
         string? image = c.Kind == "image" ? digest[6..] + ".png" : null;
         string? temporary = null;
+        bool committed=false;
         try
         {
             if (image != null)
@@ -205,32 +226,58 @@ public sealed class HistoryStore : IDisposable
             using (var command = Command("INSERT INTO history(id,digest,kind,source,source_name,text,paths,offer,summary,created,copied,favorite,bytes,image,search) VALUES($id,$d,$k,$s,$sn,$t,$p,$o,$su,$now,$now,0,$b,$i,$search)",
                 ("$id", c.Id.ToString()), ("$d", digest), ("$k", c.Kind), ("$s", c.SourceMachine.ToString()), ("$sn", c.SourceName), ("$t", c.Text), ("$p", paths), ("$o", c.OfferId?.ToString()), ("$su", c.FileSummary), ("$now", now), ("$b", bytes), ("$i", image), ("$search", string.Join("\n", c.SourceName, c.Text, paths, c.FileSummary))))
             { command.Transaction = transaction; command.ExecuteNonQuery(); }
-            Trim(transaction, c.Id);
-            transaction.Commit();
+            bool removed=Trim(transaction, c.Id);
+            transaction.Commit();committed=true;_filesNeedSweep|=removed;
         }
-        finally { if (temporary != null) File.Delete(temporary); SweepImages(); }
+        finally
+        {
+            if(temporary!=null)File.Delete(temporary);
+            if(!committed&&image!=null)_filesNeedSweep=true;
+            SweepIfNeeded();
+        }
         return Find(c.Id)!;
     }
 
     private void PruneCore()
     {
-        using (var transaction = _db.BeginTransaction()) { Trim(transaction, null); transaction.Commit(); }
-        SweepImages();
-    }
-    private void Trim(SqliteTransaction transaction, Guid? protect)
-    {
-        using (var command = Command("DELETE FROM history WHERE favorite=0 AND copied<$cut", ("$cut", DateTimeOffset.UtcNow.AddDays(-_retention.MaxDays).ToUnixTimeMilliseconds())))
-        { command.Transaction = transaction; command.ExecuteNonQuery(); }
-        while (true)
+        using(var transaction=_db.BeginTransaction())
         {
-            using var count = Command("SELECT COUNT(*),COALESCE(SUM(bytes),0) FROM history"); count.Transaction = transaction;
-            long entries, bytes;
-            using (var reader = count.ExecuteReader()) { reader.Read(); entries = reader.GetInt64(0); bytes = reader.GetInt64(1); }
-            if ((_retention.MaxEntries == 0 || entries <= _retention.MaxEntries) && bytes <= _retention.MaxStoredBytes) break;
-            using var remove = Command("DELETE FROM history WHERE id=(SELECT id FROM history WHERE favorite=0 AND id<>$p ORDER BY copied,id LIMIT 1)", ("$p", protect?.ToString() ?? ""));
-            remove.Transaction = transaction;
-            if (remove.ExecuteNonQuery() == 0) throw new IOException("History capacity is occupied by favorites; remove records before copying more.");
+            bool removed=Trim(transaction,null);transaction.Commit();_filesNeedSweep|=removed;
         }
+        SweepIfNeeded();
+    }
+    private bool Trim(SqliteTransaction transaction,Guid? protect)
+    {
+        int expired;
+        using(var command=Command("DELETE FROM history WHERE favorite=0 AND copied<$cut",("$cut",DateTimeOffset.UtcNow.AddDays(-_retention.MaxDays).ToUnixTimeMilliseconds())))
+        {command.Transaction=transaction;expired=command.ExecuteNonQuery();}
+        long entries,bytes;
+        using(var count=Command("SELECT COUNT(*),COALESCE(SUM(bytes),0) FROM history"))
+        {
+            count.Transaction=transaction;using var reader=count.ExecuteReader();reader.Read();entries=reader.GetInt64(0);bytes=reader.GetInt64(1);
+        }
+        bool Fits()=> (_retention.MaxEntries==0||entries<=_retention.MaxEntries)&&bytes<=_retention.MaxStoredBytes;
+        if(Fits())return expired>0;
+        // Read the oldest eligible victims once. Recounting every remaining row
+        // for every deletion makes a large retention reduction quadratic.
+        var victims=new List<string>();
+        using(var eligible=Command("SELECT id,bytes FROM history WHERE favorite=0 AND id<>$p ORDER BY copied,id",("$p",protect?.ToString()??"")))
+        {
+            eligible.Transaction=transaction;using var reader=eligible.ExecuteReader();
+            while(!Fits()&&reader.Read()){victims.Add(reader.GetString(0));entries--;bytes-=reader.GetInt64(1);}
+        }
+        if(!Fits())throw new IOException("History capacity is occupied by favorites; remove records before copying more.");
+        using(var remove=Command("DELETE FROM history WHERE id=$id"))
+        {
+            remove.Transaction=transaction;var parameter=remove.Parameters.AddWithValue("$id","");
+            foreach(var id in victims){parameter.Value=id;remove.ExecuteNonQuery();}
+        }
+        return expired>0||victims.Count>0;
+    }
+    private void SweepIfNeeded()
+    {
+        if(!_filesNeedSweep)return;
+        SweepImages();_filesNeedSweep=false;
     }
     private void RecoverUnattachedCopies()
     {

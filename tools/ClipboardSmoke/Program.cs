@@ -143,6 +143,23 @@ internal static class Program
         foreach (var node in nodes) node.Dispose();
         sync.Dispose(); fake.Copy("disposed"); sync.HandleClipboardUpdate(); Pump(20);
         Check(sent.Count == 0, "disposed instance does not send");
+        // A compact list entry must never truncate the content restored to the clipboard.
+        string previewRoot=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"NekoBridge-PreviewCopy-"+Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var store=new NekoBridge.Windows.History.HistoryStore(previewRoot);
+            string complete=new string('x',20000)+"-full-end";
+            var add=store.AddAsync(new NekoBridge.Windows.History.HistoryCapture(Guid.NewGuid(),"text",Guid.NewGuid(),"temporary",Text:complete));
+            while(!add.IsCompleted)Pump(5);var entry=add.GetAwaiter().GetResult();
+            var restoredClip=new FakeClipboard();
+            using var localSync=new ClipboardSync(()=>false,logs.Add,dispatcher,()=>Array.Empty<Guid>(),(_,_,_)=>Task.CompletedTask,restoredClip);
+            using var bridge=new NekoBridge.Windows.History.HistoryBridge(localSync,store,null!,logs.Add);
+            var restore=bridge.RestoreAsync(entry with{Text=complete[..256]});
+            while(!restore.IsCompleted)Pump(5);restore.GetAwaiter().GetResult();
+            Check(restoredClip.Text==complete,"preview row restores full original text");
+        }
+        finally{System.IO.Directory.Delete(previewRoot,true);}
+        ImageMemorySmoke.Run();
         Task rich = RichSmoke.Run(dispatcher);
         while (!rich.IsCompleted) Pump(20);
         rich.GetAwaiter().GetResult();

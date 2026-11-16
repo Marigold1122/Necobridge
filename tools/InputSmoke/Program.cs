@@ -63,6 +63,11 @@ Console.WriteLine("PASS receiver software replay preserves remote ownership; con
 Console.WriteLine("PASS driver injections accepted; NekoBridge self-injection excluded");
 Console.WriteLine("InputSmoke passed: MWB default absolute mapping, axis independence, bidirectional resolutions, fractional accumulation. No physical input exercised.");
 
+int inputSize=System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.Input>();
+if(inputSize!=(IntPtr.Size==8?40:28))throw new Exception("INPUT native ABI size changed");
+var sendInput=typeof(NativeMethods).GetMethod("SendInput",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!;
+if(!sendInput.GetParameters()[1].ParameterType.IsByRef)throw new Exception("Single INPUT must pass by reference");
+Console.WriteLine("PASS single INPUT ABI and by-reference native declaration; no real input injected");
 foreach(int dx in new[]{-1,0,1})
 foreach(int dy in new[]{-1,0,1})
     if(!CursorParking.ContainsParkedPoint(100,4,100+dx,4+dy))throw new Exception("Rounded park point escaped shield");

@@ -50,3 +50,12 @@ Windows 发布包包含 .NET / Windows Desktop 运行时及其许可证通知。
 ## 设计协作
 
 界面视觉由用户指定的 claude-opus-5-5 经指定服务参与设计，设计结果保存在 design/。模型仅用于开发阶段；应用不包含 API 密钥、模型 SDK 或 AI 调用功能。
+
+## 江城圆体 / JiangChengYuanTi
+
+界面内嵌江城圆体3.6（LiuPeng）的500W及600W原始字体，采用SIL Open Font License 1.1，文件未经修改。
+预览来源：https://fonts.zeoseven.com/items/59/ ，TTF分发：@fontpkg/jiang-cheng-yuan-ti 3.6.0。完整授权见Assets/Fonts/OFL-JiangChengYuanTi.txt。
+
+## Lucide navigation icons
+
+https://github.com/lucide-icons/lucide — cable, panels-top-left, settings-2; revision 333574bdecb43e7cb4a4bb1cd21d1367cfbbee2c. SVG geometry converted for WPF; original SVG and upstream copyright/license retained at Assets/Icons/Lucide/LICENSE.txt.

@@ -18,7 +18,7 @@ public partial class MainWindow
     private int _dropColumn,_dropRow;
     private void Layout()
     {
-        if(Stage==null||_screens.Count==0||Stage.ActualWidth<8||Stage.ActualHeight<8)return;
+        if(Stage==null||!PanelArr.IsVisible||_screens.Count==0||Stage.ActualWidth<8||Stage.ActualHeight<8)return;
         if(_screenDrag!=Guid.Empty)return;
         _slotWidth=240;_slotHeight=135;
         int minColumn=_screens.Min(s=>s.Column),maxColumn=_screens.Max(s=>s.Column);

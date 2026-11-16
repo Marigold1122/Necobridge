@@ -138,11 +138,14 @@ public partial class MainWindow : Window
         menu.Items.Add("退出 NekoBridge",null,(_,_)=>UI(Quit));
         _tray.ContextMenuStrip=menu;_tray.DoubleClick+=(_,_)=>UI(ShowWindow);
         _pairingTimer=new DispatcherTimer{Interval=TimeSpan.FromSeconds(1)};
-        _pairingTimer.Tick+=(_,_)=>RefreshStatus();
+        _pairingTimer.Tick+=(_,_)=>{if(IsVisible)RefreshStatus();};
         _pairingTimer.Start();
+        IsVisibleChanged+=(_,_)=>RefreshPresentationResources();
+        StateChanged+=(_,_)=>RefreshPresentationResources();
         Loaded+=(_,_)=>StartNode();
         Closing+=OnClosing;
         _uiReady=true;InitializeClipboardSettings();RefreshPeers();
+        RefreshPresentationResources();
         _=CheckUpdatesAsync();
         Loaded+=(_,_)=>{NavConn.IsChecked=true;Nav_Checked(NavConn,new RoutedEventArgs());Layout();};
     }
@@ -223,7 +226,7 @@ public partial class MainWindow : Window
     }
     private void RefreshStatus()
     {
-        if(!_uiReady)return;
+        if(!_uiReady||!IsVisible||WindowState==WindowState.Minimized)return;
         int online=_node.Peers.Count(p=>p.IsConnected);
         bool paused=_router.Paused;
         StateText.Text=_startupError!=null?"启动失败":!_started?"正在启动":paused?"共享已暂停":online>0?"已连接":"仅本机";
@@ -630,7 +633,7 @@ public partial class MainWindow : Window
         var icon=confirm?MessageBoxImage.Question:MessageBoxImage.Information;
         return (IsVisible?MessageBox.Show(this,text,title,buttons,icon):MessageBox.Show(text,title,buttons,icon))==MessageBoxResult.OK;
     }
-    private void ShowWindow(){Show();WindowState=WindowState.Normal;Activate();}
+    private void ShowWindow(){Show();WindowState=WindowState.Normal;RefreshStatus();Layout();Activate();}
     private void OnClosing(object? sender,CancelEventArgs e){if(!_quitting){e.Cancel=true;Hide();}}
     private async void Quit()
     {

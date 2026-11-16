@@ -50,6 +50,8 @@ public sealed partial class BridgeNode : IAsyncDisposable
     {
         get { lock (gate) return settings.Peers.Select(p => new PeerSnapshot(p.Id, p.Name, FormatAddress(p.Host, p.Port), connections.ContainsKey(p.Id) ? "已连接" : "未连接", p.Width, p.Height, connections.ContainsKey(p.Id))).ToArray(); }
     }
+    // Input timer/hook paths must not allocate the complete UI peer snapshot.
+    public bool IsConnected(Guid id) { lock(gate) return connections.ContainsKey(id); }
     public event Action<string>? Log;
     public event Action? PeersChanged;
     public event Action<Guid, ControlMessage>? MessageReceived;

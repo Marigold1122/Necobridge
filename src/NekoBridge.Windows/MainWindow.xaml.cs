@@ -42,7 +42,7 @@ namespace NekoBridge.Windows
             PanelConn.Visibility = rb == NavConn ? Visibility.Visible : Visibility.Collapsed;
             PanelArr.Visibility = rb == NavArr ? Visibility.Visible : Visibility.Collapsed;
             PanelSet.Visibility = rb == NavSet ? Visibility.Visible : Visibility.Collapsed;
-            PageNum.Text = (string)rb.Tag; PageTitle.Text = (string)rb.Content;
+            PageTitle.Text = (string)rb.Content;
             if (rb == NavArr) { Layout(); Stage.Focus(); }
         }
 

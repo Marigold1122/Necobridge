@@ -5,7 +5,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using NekoBridge.Core;
 
@@ -24,8 +23,6 @@ internal sealed class HistoryItem(HistoryEntry entry)
     public string TimeLabel=>Entry.LastCopiedAt.ToLocalTime().ToString("MM-dd HH:mm");
     public string[] Files=>Entry.SavedPaths??Entry.Paths??new[]{Entry.FileSummary??"来源文件（需要来源电脑在线，且分享尚未过期）"};
     public string Meta=>Entry.Kind=="files"?(Entry.SavedPaths!=null?"已保存离线副本":"文件引用：来源需可用；过期后请重新复制"):$"{Entry.StoredBytes/1024d:F1} KB";
-    public ImageSource? PreviewPath{get;internal set;}
-    public ImageSource? ThumbPath=>PreviewPath;
 }
 
 internal sealed class HistoryViewModel:ObservableModel
@@ -118,6 +115,15 @@ internal sealed class HistoryViewModel:ObservableModel
         if((requested??SelectedItem) is not {} item)return;
         await _bridge.RestoreAsync(item.Entry,_lifetime);await _close();
     }
+    internal Task<BitmapSource?> ReadThumbnailAsync(Guid id,CancellationToken token)
+        =>_store.ReadImageFileAsync(id,HistoryThumbnail.Decode,token);
+    internal void ReleaseVisibleItems()
+    {
+        // Invalidate searches/pages still in flight, then release display data.
+        // Persistent history and settings remain untouched.
+        _query++;SelectedItem=null;FilteredItems.Clear();Items.Clear();_loaded=0;HasMore=false;
+        Changed(nameof(IsEmpty));Changed(nameof(IsFilteredEmpty));
+    }
     private async void RefreshObserved(){try{await RefreshAsync();}catch(OperationCanceledException){}catch(Exception ex){_error(ex.Message);}}
     internal async Task RefreshAsync()
     {
@@ -135,19 +141,13 @@ internal sealed class HistoryViewModel:ObservableModel
         long query=reset?++_query:_query;
         int offset=reset?0:_loaded;
         string? kind=CurrentFilter switch{"文本"=>"text","图片"=>"image","文件"=>"files",_=>null};
-        var entries=await _store.SearchPageAsync(SearchText,CurrentFilter=="收藏",kind,100,offset,_lifetime);
+        var entries=await _store.SearchPreviewPageAsync(SearchText,CurrentFilter=="收藏",kind,100,offset,_lifetime);
         if(query!=_query)return;
         Guid selected=SelectedItem?.Id??Guid.Empty;
         var loaded=new System.Collections.Generic.List<HistoryItem>();
         foreach(var entry in entries)
         {
             var item=new HistoryItem(entry);
-            if(entry.Kind=="image")
-            {
-                byte[]? image=await _store.ReadImageAsync(entry.Id,_lifetime);
-                if(query!=_query)return;
-                if(image!=null){using var stream=new MemoryStream(image,false);var bitmap=new BitmapImage();bitmap.BeginInit();bitmap.CacheOption=BitmapCacheOption.OnLoad;bitmap.StreamSource=stream;bitmap.DecodePixelWidth=320;bitmap.EndInit();bitmap.Freeze();item.PreviewPath=bitmap;}
-            }
             loaded.Add(item);
         }
         if(query!=_query)return;

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Text.Json;
 
@@ -21,7 +22,9 @@ internal sealed class WireMessage
 internal static class Wire
 {
     internal const int MaxFrame = 2 * 1024 * 1024;
-    internal static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = false, MaxDepth = 24 };
+    // Omitted zero/null fields deserialize to the same defaults on older peers.
+    // Keep case/depth and framing unchanged; pairing proofs use parsed values.
+    internal static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = false, MaxDepth = 24, DefaultIgnoreCondition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault };
     internal static async Task WriteAsync(Stream stream, WireMessage message, CancellationToken ct)
     {
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(message, Json);
@@ -38,8 +41,23 @@ internal static class Wire
         await stream.ReadExactlyAsync(header, ct).ConfigureAwait(false);
         int length = BinaryPrimitives.ReadInt32BigEndian(header);
         if (length is <= 0 or > MaxFrame) throw new InvalidDataException("非法消息长度。");
-        byte[] bytes = new byte[length];
-        await stream.ReadExactlyAsync(bytes, ct).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<WireMessage>(bytes, Json) ?? throw new InvalidDataException("空消息。");
+        // Reuse ordinary control-frame buffers. Large metadata frames stay
+        // unpooled so an occasional 2 MiB message cannot become a permanent cache.
+        bool pooled=length<=65536;
+        byte[] bytes=pooled?ArrayPool<byte>.Shared.Rent(length):new byte[length];
+        try
+        {
+            await stream.ReadExactlyAsync(bytes.AsMemory(0,length), ct).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<WireMessage>(bytes.AsSpan(0,length), Json) ?? throw new InvalidDataException("空消息。");
+        }
+        finally
+        {
+            if(pooled)
+            {
+                // Frames may contain clipboard data and pairing proofs.
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(bytes.AsSpan(0,length));
+                ArrayPool<byte>.Shared.Return(bytes);
+            }
+        }
     }
 }

@@ -24,14 +24,13 @@ public sealed class NativeDragBridge : IDisposable
     private DragSession? session;
     private bool disposed;
     private Exception? apartmentFailure;
+    private bool apartmentStarted;
     internal static bool SystemLeftDown => (NativeMethods.GetAsyncKeyState(1) & 0x8000) != 0;
 
     public NativeDragBridge(BridgeNode node, Action<string> log)
     {
         this.node = node ?? throw new ArgumentNullException(nameof(node));
         this.log = log ?? throw new ArgumentNullException(nameof(log));
-        var thread = new Thread(RunApartment) { IsBackground = true, Name = "NekoBridge OLE drag" };
-        thread.SetApartmentState(ApartmentState.STA); thread.Start();
     }
     private void RunApartment()
     {
@@ -48,8 +47,21 @@ public sealed class NativeDragBridge : IDisposable
         finally { OleNative.OleUninitialize(); }
     }
     private void SafeLog(string message) { try { log(message); } catch { /* Logging must not unwind OLE callbacks. */ } }
-    private async Task InvokeAsync(Action<HelperWindow> action)
+    private async Task InvokeAsync(Action<HelperWindow> action,bool shuttingDown=false)
     {
+        lock(gate)
+        {
+            if(disposed&&!shuttingDown)throw new ObjectDisposedException(nameof(NativeDragBridge));
+            if(!apartmentStarted)
+            {
+                if(shuttingDown)return;
+                apartmentStarted=true;
+                var thread=new Thread(RunApartment){IsBackground=true,Name="NekoBridge OLE drag"};
+                thread.SetApartmentState(ApartmentState.STA);
+                try{thread.Start();}
+                catch(Exception ex){apartment.TrySetException(ex);throw;}
+            }
+        }
         HelperWindow window = await apartment.Task.ConfigureAwait(false);
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         try
@@ -291,7 +303,7 @@ public sealed class NativeDragBridge : IDisposable
     }
     private async Task ShutdownAsync()
     {
-        try { await InvokeAsync(_ => { CloseCapture(); Application.ExitThread(); }).ConfigureAwait(false); }
+        try { await InvokeAsync(_ => { CloseCapture(); Application.ExitThread(); },shuttingDown:true).ConfigureAwait(false); }
         catch (Exception ex) { SafeLog("拖放线程退出失败：" + ex.Message); }
         finally { lifetime.Dispose(); }
     }

@@ -19,7 +19,8 @@ internal static class NativeMethods
     [DllImport("user32.dll")] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool UnhookWindowsHookEx(nint handle);
     [DllImport("user32.dll")] internal static extern nint CallNextHookEx(nint handle,int code,nuint message,nint data);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode)] internal static extern nint GetModuleHandle(string? name);
-    [DllImport("user32.dll", SetLastError=true)] internal static extern uint SendInput(uint count, Input[] inputs, int size);
+    [DllImport("user32.dll", SetLastError=true)] private static extern uint SendInput(uint count, ref Input input, int size);
+    private static readonly int InputSize=Marshal.SizeOf<Input>();
     [DllImport("user32.dll")] internal static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool GetCursorPos(out Point point);
     [DllImport("user32.dll")] [return:MarshalAs(UnmanagedType.Bool)] internal static extern bool SetCursorPos(int x,int y);
@@ -48,7 +49,9 @@ internal static class NativeMethods
     }
     private static void Send(Input input)
     {
-        if(SendInput(1,new[]{input},Marshal.SizeOf<Input>())!=1)
+        // A count of one accepts the address of this stack-local INPUT. No
+        // shared scratch buffer: hook/OLE/receiver threads may inject concurrently.
+        if(SendInput(1,ref input,InputSize)!=1)
             throw new Win32Exception(Marshal.GetLastWin32Error(),"系统拒绝注入输入。请检查窗口权限；不支持 UAC 安全桌面。");
     }
 }

@@ -10,7 +10,7 @@
     <AssemblyName>NekoBridge</AssemblyName>
     <RootNamespace>NekoBridge.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.3.0</Version>
+    <Version>1.4.7</Version>
     <!-- WPF owns startup; process DPI awareness is declared in app.manifest. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <ApplicationIcon>Assets/nekobridge.ico</ApplicationIcon>
@@ -23,6 +23,10 @@
     <ProjectReference Include="../NekoBridge.Core/NekoBridge.Core.csproj" />
     <Resource Include="Assets/4955775.png" />
     <Resource Include="Assets/logo.png" />
+    <Content Include="Assets/Icons/Lucide/LICENSE.txt" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="Assets/Fonts/JiangChengYuanTi-500W.ttf" />
+    <Resource Include="Assets/Fonts/JiangChengYuanTi-600W.ttf" />
+    <Content Include="Assets/Fonts/OFL-JiangChengYuanTi.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Resource Include="Assets/nekobridge.ico" />
   </ItemGroup>
 </Project>

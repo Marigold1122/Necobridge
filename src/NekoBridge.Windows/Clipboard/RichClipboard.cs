@@ -96,8 +96,22 @@ internal sealed record RichClipboard(string Kind, string Fingerprint, string[]? 
         if (decoder.Frames.Count != 1) throw new InvalidDataException();
         BitmapSource image = decoder.Frames[0]; CheckDimensions(image.PixelWidth, image.PixelHeight);
         var normalized = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
-        byte[] pixels = new byte[checked(width * height * 4)]; normalized.CopyPixels(pixels, width * 4, 0);
-        return new("image", Digest($"image:{width}:{height}:" + Convert.ToHexString(SHA256.HashData(pixels))), Png: png);
+        // Hash the same top-down BGRA bytes in bounded strips instead of
+        // allocating another complete image just to compute its identity.
+        int stride=checked(width*4),rows=Math.Min(height,Math.Max(1,65536/stride));
+        byte[] strip=new byte[checked(stride*rows)];
+        using var hash=IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        try
+        {
+            for(int y=0;y<height;y+=rows)
+            {
+                int count=Math.Min(rows,height-y);
+                normalized.CopyPixels(new Int32Rect(0,y,width,count),strip,stride,0);
+                hash.AppendData(strip.AsSpan(0,count*stride));
+            }
+            return new("image",Digest($"image:{width}:{height}:"+Convert.ToHexString(hash.GetHashAndReset())),Png:png);
+        }
+        finally{CryptographicOperations.ZeroMemory(strip);}
     }
     internal static void CheckDimensions(int width, int height)
     {
@@ -130,14 +144,15 @@ internal sealed record RichClipboard(string Kind, string Fingerprint, string[]? 
         var image = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Bgra32, null, 0);
         image.Freeze();
         int width = image.PixelWidth, height = image.PixelHeight, stride = width * 4;
-        byte[] pixels = new byte[stride * height]; image.CopyPixels(pixels, stride, 0);
-        // Explicit top-down BI_BITFIELDS DIBV5 with alpha, plus legacy bottom-up BI_RGB DIB.
-        byte[] v5 = new byte[124 + pixels.Length];
-        Put(v5,0,124); Put(v5,4,width); Put(v5,8,-height); Put(v5,12,0x00200001); Put(v5,16,3); Put(v5,20,pixels.Length);
+        // Copy directly into the required DIBV5 buffer. No third full-image
+        // scratch array is needed while both native compatibility formats live.
+        int pixelBytes=checked(stride*height);
+        byte[] v5 = new byte[checked(124+pixelBytes)];
+        Put(v5,0,124); Put(v5,4,width); Put(v5,8,-height); Put(v5,12,0x00200001); Put(v5,16,3); Put(v5,20,pixelBytes);
         Put(v5,40,0x00ff0000); Put(v5,44,0x0000ff00); Put(v5,48,0x000000ff); Put(v5,52,unchecked((int)0xff000000)); Put(v5,56,0x73524742);
-        pixels.CopyTo(v5,124);
-        byte[] dib = new byte[40 + pixels.Length]; Put(dib,0,40); Put(dib,4,width); Put(dib,8,height); Put(dib,12,0x00200001); Put(dib,20,pixels.Length);
-        for(int row=0;row<height;row++) Buffer.BlockCopy(pixels,row*stride,dib,40+(height-row-1)*stride,stride);
+        image.CopyPixels(v5,stride,124);
+        byte[] dib = new byte[checked(40+pixelBytes)]; Put(dib,0,40); Put(dib,4,width); Put(dib,8,height); Put(dib,12,0x00200001); Put(dib,20,pixelBytes);
+        for(int row=0;row<height;row++) Buffer.BlockCopy(v5,124+row*stride,dib,40+(height-row-1)*stride,stride);
         var data = new System.Windows.DataObject();
         data.SetData(DataFormats.Bitmap, image, false);
         data.SetData("PNG", new MemoryStream(Png!, false), false);

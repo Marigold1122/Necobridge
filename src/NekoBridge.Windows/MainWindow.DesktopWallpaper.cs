@@ -11,8 +11,24 @@ public partial class MainWindow
     private string? _deviceWallpaperFile;
     private DateTime _deviceWallpaperStamp;
     private int _wallpaperRequest;
+    private void RefreshPresentationResources()
+    {
+        bool presented=IsVisible&&WindowState!=System.Windows.WindowState.Minimized&&!_quitting;
+        if(presented){_pairingTimer.Start();UpdateDeviceWallpaper();RefreshStatus();Layout();}
+        else
+        {
+            _pairingTimer.Stop();ReleaseDeviceWallpaper();
+            LayoutLinks.Children.Clear();Screens.ItemsSource=null;
+        }
+    }
+    private void ReleaseDeviceWallpaper()
+    {
+        _wallpaperRequest++;_deviceWallpaperFile=null;
+        DeviceWallpaper.ImageSource=null;
+    }
     private async void UpdateDeviceWallpaper()
     {
+        if(!IsVisible||WindowState==System.Windows.WindowState.Minimized||_quitting)return;
         var path=new StringBuilder(260);
         if(!SystemParametersInfo(0x73,(uint)path.Capacity,path,0)){Log("读取桌面壁纸失败。");return;}
         string file=path.ToString();
@@ -28,12 +44,12 @@ public partial class MainWindow
                 var result=new BitmapImage();result.BeginInit();result.CacheOption=BitmapCacheOption.OnLoad;
                 result.DecodePixelWidth=640;result.StreamSource=stream;result.EndInit();result.Freeze();return result;
             });
-            if(request==_wallpaperRequest&&!_quitting)DeviceWallpaper.ImageSource=bitmap;
+            if(request==_wallpaperRequest&&!_quitting&&IsVisible&&WindowState!=System.Windows.WindowState.Minimized)DeviceWallpaper.ImageSource=bitmap;
         }
         catch(Exception ex)when(ex is IOException or UnauthorizedAccessException or NotSupportedException or ArgumentException)
         {
             _deviceWallpaperFile=null;DeviceWallpaper.ImageSource=null;
-            Log("桌面壁纸载入失败，设备卡片不显示图片。");
+            if(!_quitting&&IsVisible)Log("桌面壁纸载入失败，设备卡片不显示图片。");
         }
     }
     [DllImport("user32.dll",EntryPoint="SystemParametersInfoW",CharSet=CharSet.Unicode,SetLastError=true)]

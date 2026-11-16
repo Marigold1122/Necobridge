@@ -10,6 +10,10 @@ namespace NekoBridge.Windows.History;
 public partial class HistoryWindow:Window
 {
     private readonly HistoryViewModel _model;
+    private readonly System.Threading.CancellationToken _lifetime;
+    private readonly System.Collections.Generic.Dictionary<Image,System.Threading.CancellationTokenSource> _thumbnailLoads=new();
+    private readonly System.Threading.SemaphoreSlim _thumbnailGate=new(2,2);
+    private readonly System.Collections.Generic.HashSet<Image> _thumbnailImages=new();
     private bool _dialog;
     internal bool IsWorking=>_model.Busy;
     internal HistoryWindow(HistoryStore store,HistoryBridge bridge,ClipboardSettingsModel clipboardSettings,System.Threading.CancellationToken lifetime)
@@ -19,6 +23,15 @@ public partial class HistoryWindow:Window
         _model=new HistoryViewModel(store,bridge,clipboardSettings,Finish,Error,Confirm,lifetime);
         Closing+=(_,args)=>{if(!lifetime.IsCancellationRequested){args.Cancel=true;Hide();}};
         DataContext=_model;
+        _lifetime=lifetime;
+        IsVisibleChanged+=(_,_)=>
+        {
+            if(!IsVisible)
+            {
+                foreach(var image in _thumbnailImages.Concat(_thumbnailLoads.Keys).Distinct().ToArray())ReleaseThumbnail(image);
+                _model.ReleaseVisibleItems();
+            }
+        };
         HistoryVersionText.Text=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)??"";
     }
     protected override void OnSourceInitialized(EventArgs e)
@@ -52,6 +65,40 @@ public partial class HistoryWindow:Window
             if(!double.IsNaN(Top))Top=Math.Clamp(Top,topLeft.Y,Math.Max(topLeft.Y,bottomRight.Y-Height));
         }
         Show();Activate();ClipList.Focus();
+    }
+    private void ReleaseThumbnail(Image image)
+    {
+        if(_thumbnailLoads.Remove(image,out var request))request.Cancel();
+        _thumbnailImages.Remove(image);image.Source=null;
+    }
+    private async void OnThumbnailLoaded(object sender,RoutedEventArgs e)
+    {
+        if(sender is not Image image||!IsVisible)return;
+        ReleaseThumbnail(image);
+        if(image.DataContext is not HistoryItem{Kind:"Image"} item)return;
+        using var stop=System.Threading.CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
+        _thumbnailLoads[image]=stop;_thumbnailImages.Add(image);
+        bool acquired=false;
+        try
+        {
+            await _thumbnailGate.WaitAsync(stop.Token);acquired=true;
+            var preview=await _model.ReadThumbnailAsync(item.Id,stop.Token);
+            if(!stop.IsCancellationRequested&&IsVisible&&image.IsLoaded&&ReferenceEquals(image.DataContext,item))image.Source=preview;
+        }
+        catch(OperationCanceledException) { }
+        catch(Exception ex){App.LogFailure(ex);}
+        finally
+        {
+            if(acquired)_thumbnailGate.Release();
+            if(_thumbnailLoads.TryGetValue(image,out var request)&&ReferenceEquals(request,stop))_thumbnailLoads.Remove(image);
+        }
+    }
+    private void OnThumbnailUnloaded(object sender,RoutedEventArgs e){if(sender is Image image)ReleaseThumbnail(image);}
+    private void OnThumbnailContextChanged(object sender,DependencyPropertyChangedEventArgs e)
+    {
+        if(sender is not Image image)return;
+        ReleaseThumbnail(image);
+        if(image.IsLoaded&&IsVisible)OnThumbnailLoaded(image,new RoutedEventArgs());
     }
     private async void OnHistoryScrollChanged(object sender,ScrollChangedEventArgs e)
     {

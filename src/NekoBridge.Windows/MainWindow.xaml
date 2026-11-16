@@ -1,10 +1,11 @@
 <Window x:Class="NekoBridge.Windows.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:NekoBridge.Windows.Controls"
         Title="NekoBridge" Icon="/NekoBridge;component/Assets/nekobridge.ico" Height="744" Width="1136" MinHeight="624" MinWidth="960"
         WindowStyle="None" WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Paper}" UseLayoutRounding="True" SnapsToDevicePixels="True"
-        FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI" TextOptions.TextFormattingMode="Ideal"
+        FontFamily="pack://application:,,,/NekoBridge;component/Assets/Fonts/#JiangChengYuanTi" TextOptions.TextRenderingMode="Auto" TextOptions.TextFormattingMode="Ideal"
         StateChanged="Window_StateChanged" SourceInitialized="Window_SourceInitialized">
     <WindowChrome.WindowChrome>
         <WindowChrome CaptionHeight="0" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
@@ -52,15 +53,19 @@
             <Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Margin" Value="0,0,0,16"/>
         </Style>
 
+        <Geometry x:Key="NavConnectionIcon">M17 19a1 1 0 0 1-1-1v-2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a1 1 0 0 1-1 1z M17 21v-2 M19 14V6.5a1 1 0 0 0-7 0v11a1 1 0 0 1-7 0V10 M21 21v-2 M3 5V3 M4 10a2 2 0 0 1-2-2V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2a2 2 0 0 1-2 2z M7 5V3</Geometry>
+        <Geometry x:Key="NavLayoutIcon">M5.0,3.0 H19.0 A2.0,2.0 0 0 1 21.0,5.0 V19.0 A2.0,2.0 0 0 1 19.0,21.0 H5.0 A2.0,2.0 0 0 1 3.0,19.0 V5.0 A2.0,2.0 0 0 1 5.0,3.0 Z M3 9h18 M9 21V9</Geometry>
+        <Geometry x:Key="NavSettingsIcon">M14 17H5 M19 7h-9 M14.0,17.0 A3.0,3.0 0 1 0 20.0,17.0 A3.0,3.0 0 1 0 14.0,17.0 M4.0,7.0 A3.0,3.0 0 1 0 10.0,7.0 A3.0,3.0 0 1 0 4.0,7.0</Geometry>
+
         <Style x:Key="NavItem" TargetType="RadioButton">
-            <Setter Property="Height" Value="40"/><Setter Property="Cursor" Value="Hand"/><Setter Property="GroupName" Value="Nav"/>
+            <Setter Property="Height" Value="40"/><Setter Property="Cursor" Value="Hand"/><Setter Property="GroupName" Value="Nav"/><Setter Property="FontWeight" Value="Normal"/>
             <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
                 <Grid x:Name="Bg" Background="Transparent">
                     <Rectangle x:Name="Bar" Width="3" HorizontalAlignment="Left" Fill="Transparent"/>
                     <StackPanel Orientation="Horizontal" Margin="24,0,0,0" VerticalAlignment="Center">
-                        <TextBlock x:Name="Num" Text="{TemplateBinding Tag}" Style="{StaticResource Mono}" Width="24"/>
-                        <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" FontSize="12.5" Foreground="{DynamicResource Ink70}" VerticalAlignment="Center"/>
+                        <Viewbox Width="19" Height="19" Margin="0,0,12,0" VerticalAlignment="Center" IsHitTestVisible="False"><Canvas Width="24" Height="24"><Path x:Name="NavGlyph" Data="{TemplateBinding Tag}" Stroke="{DynamicResource Ink70}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/></Canvas></Viewbox>
+                        <TextBlock x:Name="Txt" Text="{TemplateBinding Content}" FontSize="16" FontWeight="Normal" Foreground="{DynamicResource Ink70}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Grid>
                 <ControlTemplate.Triggers>
@@ -69,8 +74,7 @@
                         <Setter TargetName="Bg" Property="Background" Value="{DynamicResource LimeWash}"/>
                         <Setter TargetName="Bar" Property="Fill" Value="{DynamicResource Lime}"/>
                         <Setter TargetName="Txt" Property="Foreground" Value="{DynamicResource Ink}"/>
-                        <Setter TargetName="Txt" Property="FontWeight" Value="SemiBold"/>
-                        <Setter TargetName="Num" Property="Foreground" Value="{DynamicResource LimeDeep}"/>
+                        <Setter TargetName="NavGlyph" Property="Stroke" Value="{DynamicResource LimeDeep}"/>
                     </Trigger>
                 </ControlTemplate.Triggers>
             </ControlTemplate></Setter.Value></Setter>
@@ -127,13 +131,13 @@
                 <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
             </Border>
         </ControlTemplate>
-        <Style TargetType="TextBox">
+        <Style TargetType="TextBox"><Setter Property="FontFamily" Value="Microsoft YaHei"/>
             <Setter Property="FontSize" Value="11.5"/><Setter Property="MinHeight" Value="32"/><Setter Property="Padding" Value="8,4"/>
             <Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="CaretBrush" Value="{DynamicResource Ink}"/>
             <Setter Property="Background" Value="{DynamicResource Paper}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
             <Setter Property="SelectionBrush" Value="{DynamicResource Lime}"/><Setter Property="Template" Value="{StaticResource FieldTemplate}"/>
         </Style>
-        <Style TargetType="PasswordBox">
+        <Style TargetType="PasswordBox"><Setter Property="FontFamily" Value="Microsoft YaHei"/>
             <Setter Property="FontSize" Value="11.5"/><Setter Property="MinHeight" Value="32"/><Setter Property="Padding" Value="8,4"/>
             <Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="CaretBrush" Value="{DynamicResource Ink}"/>
             <Setter Property="Background" Value="{DynamicResource Paper}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/>
@@ -156,9 +160,9 @@
             <Grid Margin="24,0,0,0">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="216"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Image Source="/NekoBridge;component/Assets/logo.png" Width="24" Height="24" Stretch="Uniform"/>
+                    <ui:CompactLogo Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock Text="NekoBridge" Margin="8,0,0,0" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" VerticalAlignment="Center"/>
-                    <TextBlock Text="1.3.0" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
+                    <TextBlock Text="1.4.7" Style="{StaticResource Mono}" Margin="8,0,0,0"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="32,0,0,0" VerticalAlignment="Center">
                     <Ellipse x:Name="StateDot" Width="8" Height="8" StrokeThickness="1.5" Stroke="{DynamicResource Muted}"/>
@@ -218,9 +222,9 @@
                     </Border>
                 </Border>
                 <StackPanel Grid.Row="1" AutomationProperties.Name="导航">
-                    <RadioButton x:Name="NavConn" AutomationProperties.AutomationId="NavConn" Style="{StaticResource NavItem}" Tag="01" Content="连接" Checked="Nav_Checked" IsChecked="True"/>
-                    <RadioButton x:Name="NavArr" AutomationProperties.AutomationId="NavArr" Style="{StaticResource NavItem}" Tag="02" Content="屏幕排列" Checked="Nav_Checked"/>
-                    <RadioButton x:Name="NavSet" AutomationProperties.AutomationId="NavSet" Style="{StaticResource NavItem}" Tag="03" Content="设置" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavConn" Tag="{StaticResource NavConnectionIcon}" AutomationProperties.AutomationId="NavConn" Style="{StaticResource NavItem}" Content="连接" Checked="Nav_Checked" IsChecked="True"/>
+                    <RadioButton x:Name="NavArr" Tag="{StaticResource NavLayoutIcon}" AutomationProperties.AutomationId="NavArr" Style="{StaticResource NavItem}" Content="屏幕排列" Checked="Nav_Checked"/>
+                    <RadioButton x:Name="NavSet" Tag="{StaticResource NavSettingsIcon}" AutomationProperties.AutomationId="NavSet" Style="{StaticResource NavItem}" Content="设置" Checked="Nav_Checked"/>
                 </StackPanel>
                 <StackPanel Grid.Row="3" Margin="24,0,24,24">
                     <Rectangle Height="1" Fill="{DynamicResource Line}" Margin="0,0,0,16"/>
@@ -234,13 +238,11 @@
         <Grid x:Name="MainContent" Grid.Row="1" Grid.Column="1" Margin="32,24,32,24" HorizontalAlignment="Stretch">
             <Grid.RowDefinitions><RowDefinition Height="40"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
-                <TextBlock x:Name="PageNum" Text="02" Style="{StaticResource Mono}" Foreground="{DynamicResource LimeDeep}" FontSize="11"/>
-                <Rectangle Width="1" Height="12" Fill="{DynamicResource Line}" Margin="8,0"/>
                 <TextBlock x:Name="PageTitle" Text="屏幕排列" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/>
             </StackPanel>
 
             <!-- 01 连接：按已确认 HTML 移植，样式仅作用于连接页 -->
-            <Grid x:Name="PanelConn" Grid.Row="1" Visibility="Collapsed" TextElement.FontFamily="Microsoft YaHei" TextOptions.TextFormattingMode="Display">
+            <Grid x:Name="PanelConn" Grid.Row="1" Visibility="Collapsed" TextElement.FontFamily="pack://application:,,,/NekoBridge;component/Assets/Fonts/#JiangChengYuanTi" TextOptions.TextFormattingMode="Ideal">
                 <Grid.Resources>
                     <Style x:Key="ConnectionButton" TargetType="Button">
                         <Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="24,12"/>
@@ -283,7 +285,7 @@
                     <Style x:Key="ConnectionCaption" TargetType="TextBlock"><Setter Property="FontSize" Value="14"/><Setter Property="LineHeight" Value="25"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="Foreground" Value="{DynamicResource Ink70}"/></Style>
                     <Style x:Key="ConnectionHeading" TargetType="TextBlock"><Setter Property="FontSize" Value="26"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Margin" Value="0,0,0,18"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
                     <Style x:Key="ConnectionFieldLabel" TargetType="TextBlock" BasedOn="{StaticResource ConnectionCaption}"><Setter Property="FontSize" Value="12"/><Setter Property="Margin" Value="0,14,0,8"/></Style>
-                    <Style x:Key="ConnectionField" TargetType="Control"><Setter Property="FontSize" Value="15"/><Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="14,10"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Background" Value="{DynamicResource Paper}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Control"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2" CornerRadius="11" Padding="{TemplateBinding Padding}"><ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter></Style>
+                    <Style x:Key="ConnectionField" TargetType="Control"><Setter Property="FontFamily" Value="Microsoft YaHei"/><Setter Property="FontSize" Value="15"/><Setter Property="MinHeight" Value="48"/><Setter Property="Padding" Value="14,10"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Background" Value="{DynamicResource Paper}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Control"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2" CornerRadius="11" Padding="{TemplateBinding Padding}"><ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/></Border></ControlTemplate></Setter.Value></Setter></Style>
                     <Style x:Key="ConnectionBall" TargetType="Border"><Setter Property="Width" Value="48"/><Setter Property="Height" Value="48"/><Setter Property="CornerRadius" Value="24"/><Setter Property="BorderThickness" Value="1"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="Background" Value="{DynamicResource Paper}"/></Style>
                     <Style x:Key="ConnectionNumber" TargetType="TextBlock"><Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="HorizontalAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Foreground" Value="{DynamicResource Muted}"/></Style>
                     <Style x:Key="ConnectionInfo" TargetType="Border"><Setter Property="Padding" Value="22,18"/><Setter Property="CornerRadius" Value="14"/><Setter Property="Background" Value="{DynamicResource Paper2}"/></Style>
@@ -419,9 +421,9 @@
                                     <Border Width="{Binding W}" Height="{Binding H}" HorizontalAlignment="Left" VerticalAlignment="Top" MouseLeftButtonDown="Screen_MouseDown" MouseLeftButtonUp="Screen_MouseUp" LostMouseCapture="Screen_LostCapture" Background="{DynamicResource Paper}" BorderBrush="{DynamicResource Ink}" BorderThickness="1.5" Cursor="Hand">
                                         <Grid ClipToBounds="True">
                                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                            <TextBlock x:Name="ScreenName" Text="{Binding Name}" FontFamily="Microsoft YaHei" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis" Margin="16,14,16,0"/>
-                                            <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" Margin="20,12"><TextBlock Text="{Binding Res}" FontFamily="Microsoft YaHei" FontSize="38" Foreground="{DynamicResource Ink70}"/></Viewbox>
-                                            <TextBlock Grid.Row="2" Text="{Binding Role}" FontFamily="Microsoft YaHei" FontSize="12" Foreground="{DynamicResource Muted}" Margin="16,0,16,14"/>
+                                            <TextBlock x:Name="ScreenName" Text="{Binding Name}" FontFamily="pack://application:,,,/NekoBridge;component/Assets/Fonts/#JiangChengYuanTi" FontSize="15" FontWeight="SemiBold" Foreground="{DynamicResource Ink}" TextTrimming="CharacterEllipsis" Margin="16,14,16,0"/>
+                                            <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" Margin="20,12"><TextBlock Text="{Binding Res}" FontFamily="pack://application:,,,/NekoBridge;component/Assets/Fonts/#JiangChengYuanTi" FontSize="38" Foreground="{DynamicResource Ink70}"/></Viewbox>
+                                            <TextBlock Grid.Row="2" Text="{Binding Role}" FontFamily="pack://application:,,,/NekoBridge;component/Assets/Fonts/#JiangChengYuanTi" FontSize="12" Foreground="{DynamicResource Muted}" Margin="16,0,16,14"/>
                                         </Grid>
                                     </Border>
                                 </Grid>
@@ -438,31 +440,20 @@
                 </Grid>
             </Grid>
 
-            <!-- 03 设置 -->
-            <ScrollViewer x:Name="PanelSet" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="5*" MinWidth="280"/><ColumnDefinition Width="32"/><ColumnDefinition Width="4*" MinWidth="240"/></Grid.ColumnDefinitions>
-                <StackPanel>
-                    <StackPanel AutomationProperties.Name="文件与剪贴板">
-                        <TextBlock Text="文件与剪贴板" Style="{StaticResource Section}"/>
-                        <CheckBox x:Name="ClipboardCheck" AutomationProperties.AutomationId="ClipboardCheck" Style="{StaticResource Square}" Content="同步剪贴板（文字、图片、文件）" IsChecked="{Binding ClipboardSettings.SharingEnabled, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
-                        <CheckBox x:Name="HistoryEnabledCheck" AutomationProperties.AutomationId="HistoryEnabledCheck" Style="{StaticResource Square}" Content="记录剪贴板历史" IsChecked="{Binding ClipboardSettings.HistoryEnabled, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
-                        <TextBlock Text="历史快捷键" Style="{StaticResource Caption}"/>
-                        <Button x:Name="ClipboardHotkeyButton" AutomationProperties.AutomationId="ClipboardHotkeyButton" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,16" Content="{Binding ClipboardSettings.HotkeyText, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Click="Hotkey_Click" PreviewKeyDown="Hotkey_KeyDown" LostKeyboardFocus="ClipboardHotkey_LostFocus"/>
-                        <TextBlock Text="本机历史保留条数（0 表示不限条数）" Style="{StaticResource Caption}"/>
-                        <TextBox x:Name="MaxItemsBox" AutomationProperties.AutomationId="MaxItemsBox" Text="{Binding ClipboardSettings.MaxItems, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" HorizontalAlignment="Left" Width="120" Margin="0,8,0,16" PreviewTextInput="MaxItems_PreviewTextInput" DataObject.Pasting="MaxItems_Pasting" LostKeyboardFocus="MaxItems_LostFocus"/>
-                        <CheckBox x:Name="RecordImagesCheck" AutomationProperties.AutomationId="RecordImagesCheck" Style="{StaticResource Square}" Content="记录图片" IsChecked="{Binding ClipboardSettings.CaptureImages, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
-                        <CheckBox x:Name="RecordFilesCheck" AutomationProperties.AutomationId="RecordFilesCheck" Style="{StaticResource Square}" Content="记录文件" IsChecked="{Binding ClipboardSettings.CaptureFiles, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
-                    </StackPanel>
-                </StackPanel>
-                <StackPanel Grid.Column="2" AutomationProperties.Name="外观与系统">
-                    <TextBlock Text="外观与系统" Style="{StaticResource Section}"/>
-                    <CheckBox x:Name="DarkCheck" AutomationProperties.AutomationId="DarkCheck" Style="{StaticResource Square}" Content="深色主题" Checked="Theme_Changed" Unchecked="Theme_Changed"/>
-                    <CheckBox x:Name="StartWithWindowsCheck" AutomationProperties.AutomationId="StartWithWindowsCheck" Style="{StaticResource Square}" Content="开机时启动" Checked="Startup_Changed" Unchecked="Startup_Changed"/>
-                    <Border BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0" Margin="0,28,0,0" Padding="0,22,0,0">
-                        <StackPanel>
-                            <TextBlock Text="软件更新" Style="{StaticResource Section}"/>
-                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBlock x:Name="UpdateVersionText" Text="当前版本 1.3.0" FontSize="12" Foreground="{DynamicResource Ink70}" VerticalAlignment="Center"/>
+            <!-- 03 设置：按确认稿分组，复用原设置绑定与事件 -->
+            <ScrollViewer x:Name="PanelSet" Grid.Row="1" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer.Resources>
+                    <Style x:Key="SettingsCard" TargetType="Border"><Setter Property="Background" Value="{DynamicResource Paper}"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="15"/></Style>
+                    <Style x:Key="SettingsRow" TargetType="Border"><Setter Property="MinHeight" Value="74"/><Setter Property="Padding" Value="20,17"/><Setter Property="BorderBrush" Value="{DynamicResource Line}"/><Setter Property="BorderThickness" Value="0,0,0,1"/></Style>
+                    <Style x:Key="SettingsSwitch" TargetType="CheckBox">
+                        <Setter Property="FontSize" Value="14"/><Setter Property="Foreground" Value="{DynamicResource Ink}"/><Setter Property="Cursor" Value="Hand"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+                        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox"><Grid Background="Transparent"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition Width="38"/></Grid.ColumnDefinitions><ContentPresenter VerticalAlignment="Center"/><Border x:Name="Track" Grid.Column="2" Width="38" Height="23" CornerRadius="12" Background="{DynamicResource Line}" VerticalAlignment="Center"><Ellipse x:Name="Thumb" Width="17" Height="17" Fill="White" HorizontalAlignment="Left" Margin="3,0,0,0"/></Border></Grid><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="#789645"/><Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right"/><Setter TargetName="Thumb" Property="Margin" Value="0,0,3,0"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+                    </Style>
+</ScrollViewer.Resources>
+                <Grid MaxWidth="1200" HorizontalAlignment="Stretch"><Grid.ColumnDefinitions><ColumnDefinition Width="1.13*" MinWidth="280"/><ColumnDefinition Width="28"/><ColumnDefinition Width="*" MinWidth="280"/></Grid.ColumnDefinitions>
+                    <StackPanel><StackPanel Margin="0,0,0,26"><TextBlock Text="文件与剪贴板" Style="{StaticResource Section}" Margin="4,0,0,12"/><Border Style="{StaticResource SettingsCard}"><StackPanel><Border Style="{StaticResource SettingsRow}"><CheckBox x:Name="ClipboardCheck" AutomationProperties.AutomationId="ClipboardCheck" Style="{StaticResource SettingsSwitch}" Content="同步剪贴板" IsChecked="{Binding ClipboardSettings.SharingEnabled, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/></Border><Border Style="{StaticResource SettingsRow}"><CheckBox x:Name="HistoryEnabledCheck" AutomationProperties.AutomationId="HistoryEnabledCheck" Style="{StaticResource SettingsSwitch}" Content="剪贴板历史" IsChecked="{Binding ClipboardSettings.HistoryEnabled, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/></Border><Border Style="{StaticResource SettingsRow}"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Text="历史快捷键" FontSize="14" Foreground="{DynamicResource Ink}"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><Button x:Name="ClipboardHotkeyButton" AutomationProperties.AutomationId="ClipboardHotkeyButton" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0" Content="{Binding ClipboardSettings.HotkeyText, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" Click="Hotkey_Click" PreviewKeyDown="Hotkey_KeyDown" LostKeyboardFocus="ClipboardHotkey_LostFocus"/></StackPanel></Grid></Border><Border Style="{StaticResource SettingsRow}"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel VerticalAlignment="Center"><TextBlock Text="本机历史保留条数" FontSize="14" Foreground="{DynamicResource Ink}"/><TextBlock Text="0 为不限" FontSize="11" Foreground="{DynamicResource Muted}" Margin="0,4,0,0"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBox x:Name="MaxItemsBox" AutomationProperties.AutomationId="MaxItemsBox" Text="{Binding ClipboardSettings.MaxItems, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" HorizontalAlignment="Left" Width="84" Margin="0" PreviewTextInput="MaxItems_PreviewTextInput" DataObject.Pasting="MaxItems_Pasting" LostKeyboardFocus="MaxItems_LostFocus"/></StackPanel></Grid></Border></StackPanel></Border></StackPanel><StackPanel Margin="0,0,0,26"><TextBlock Text="历史记录内容" Style="{StaticResource Section}" Margin="4,0,0,12"/><Border Style="{StaticResource SettingsCard}"><StackPanel><Border Style="{StaticResource SettingsRow}"><CheckBox x:Name="RecordImagesCheck" AutomationProperties.AutomationId="RecordImagesCheck" Style="{StaticResource SettingsSwitch}" Content="记录图片" IsChecked="{Binding ClipboardSettings.CaptureImages, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/></Border><Border Style="{StaticResource SettingsRow}"><CheckBox x:Name="RecordFilesCheck" AutomationProperties.AutomationId="RecordFilesCheck" Style="{StaticResource SettingsSwitch}" Content="记录文件" IsChecked="{Binding ClipboardSettings.CaptureFiles, RelativeSource={RelativeSource AncestorType={x:Type Window}}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/></Border></StackPanel></Border></StackPanel></StackPanel>
+                    <StackPanel Grid.Column="2"><StackPanel Margin="0,0,0,26"><TextBlock Text="外观与系统" Style="{StaticResource Section}" Margin="4,0,0,12"/><Border Style="{StaticResource SettingsCard}"><StackPanel><Border Style="{StaticResource SettingsRow}"><CheckBox x:Name="DarkCheck" AutomationProperties.AutomationId="DarkCheck" Style="{StaticResource SettingsSwitch}" Content="深色主题" Checked="Theme_Changed" Unchecked="Theme_Changed"/></Border><Border Style="{StaticResource SettingsRow}"><CheckBox x:Name="StartWithWindowsCheck" AutomationProperties.AutomationId="StartWithWindowsCheck" Style="{StaticResource SettingsSwitch}" Content="开机时启动" Checked="Startup_Changed" Unchecked="Startup_Changed"/></Border></StackPanel></Border></StackPanel><StackPanel><TextBlock Text="关于 NekoBridge" Style="{StaticResource Section}" Margin="4,0,0,12"/><Border Style="{StaticResource SettingsCard}"><StackPanel><StackPanel Orientation="Horizontal" Margin="20,22"><ui:CompactLogo Width="44" Height="44"/><StackPanel Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock Text="NekoBridge" FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Ink}"/><TextBlock Text="版本 1.4.7" FontSize="12" Foreground="{DynamicResource Muted}" Margin="0,4,0,0"/></StackPanel></StackPanel><StackPanel Margin="20,0,20,18">                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="UpdateVersionText" Text="当前版本 1.4.7" FontSize="12" Foreground="{DynamicResource Ink70}" VerticalAlignment="Center"/>
                                 <Button x:Name="UpdateCheckButton" Grid.Column="1" Style="{StaticResource Primary}" Content="检查更新" Click="UpdateCheck_Click"/>
                             </Grid>
                             <TextBlock x:Name="UpdateStatusText" Text="尚未检查" Style="{StaticResource Caption}" Foreground="{DynamicResource Ink70}" Margin="0,14,0,0" AutomationProperties.LiveSetting="Polite"/>
@@ -473,10 +464,9 @@
                                 <Button x:Name="UpdateRestartButton" Visibility="Collapsed" Style="{StaticResource Primary}" Content="重启并更新" Click="UpdateRestart_Click" Margin="0,0,8,8"/>
                                 <Button Style="{StaticResource Primary}" Content="发布页 ↗" Click="UpdateReleasePage_Click" Margin="0,0,0,8"/>
                             </WrapPanel>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </Grid></ScrollViewer>
+</StackPanel></StackPanel></Border></StackPanel></StackPanel>
+                </Grid>
+            </ScrollViewer>
         </Grid>
 
         <!-- 状态栏：传输内置于此 -->
