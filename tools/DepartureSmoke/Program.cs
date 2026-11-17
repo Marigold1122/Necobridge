@@ -17,3 +17,7 @@ var negative=new Rectangle(-2560,-1440,2560,1440);
 var point=CursorParking.SelectParkingPoint(negative,new Rectangle(-2560,-1440,2560,1390));
 if(point!=new Point(-1280,-5))throw new Exception("negative monitor coordinates");
 Console.WriteLine("PASS negative monitor coordinates; no input injected");
+if(CursorParking.ShouldDeferShield(screen,new Point(1280,4)))throw new Exception("Browser top shield must not be delayed");
+if(!CursorParking.ShouldDeferShield(screen,new Point(1280,1435)))throw new Exception("Geometric departure delay must remain");
+if(CursorParking.ShouldDeferShield(negative,new Point(-1280,-1436)))throw new Exception("Negative-screen top shield must not be delayed");
+Console.WriteLine("PASS browser top immediate, alternate departure delayed, negative-screen top immediate");

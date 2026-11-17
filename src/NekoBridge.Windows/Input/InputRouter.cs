@@ -280,7 +280,7 @@ internal sealed class InputRouter : IDisposable
         var bounds=screen.Bounds;
         var point=CursorParking.ParkingPoint(bounds);
         int x=point.X,y=point.Y;
-        _parking.Show(x,y);
+        _parking.Show(x,y,CursorParking.ShouldDeferShield(bounds,point));
         try{NativeMethods.MoveCursor(x,y);}
         catch(System.ComponentModel.Win32Exception ex){RestoreParking();_log($"无法停放光标：{ex.Message}");}
     }

@@ -15,7 +15,7 @@ internal sealed class CursorParking : IDisposable
     private ParkingWindow? _window;
     private Forms.Timer? _showTimer;
     private long _generation;
-    private bool _visible,_disposed;
+    private bool _visible,_disposed,_deferShield;
     private int _x,_y;
 
     // SendInput absolute-coordinate normalization may round one pixel away.
@@ -31,7 +31,7 @@ internal sealed class CursorParking : IDisposable
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
     }
-    internal void Show(int x,int y){lock(_gate){if(_disposed)return;_visible=true;_x=x;_y=y;PostLocked();}}
+    internal void Show(int x,int y,bool deferShield=false){lock(_gate){if(_disposed)return;_visible=true;_x=x;_y=y;_deferShield=deferShield;PostLocked();}}
     internal void Hide(){lock(_gate){if(_disposed)return;_visible=false;PostLocked();}}
     private void PostLocked()
     {
@@ -44,22 +44,22 @@ internal sealed class CursorParking : IDisposable
     }
     private void Apply(long generation)
     {
-        bool visible;int x,y;
+        bool visible,deferShield;
         lock(_gate)
         {
             if(generation!=_generation)return;
             if(_disposed){Forms.Application.ExitThread();return;}
-            visible=_visible;x=_x;y=_y;
+            visible=_visible;deferShield=_deferShield;
         }
         _showTimer!.Stop();
         if(!visible){_window!.Hide();return;}
-        // Let USER32 deliver the geometric departure before putting a hider
-        // over the destination. Never sleep/wait in the input hook.
+        // A top-edge hider must not wait over browser tabs. Only defer when
+        // routing selected a different point outside the original window.
         _pendingGeneration=generation;
-        _showTimer.Start();
+        if(deferShield)_showTimer.Start();else ShowPending(false);
     }
     private long _pendingGeneration;
-    private void ShowPending()
+    private void ShowPending(bool requireParked=true)
     {
         _showTimer!.Stop();
         int x,y;long generation=_pendingGeneration;
@@ -68,7 +68,7 @@ internal sealed class CursorParking : IDisposable
             if(generation!=_generation||!_visible||_disposed)return;
             x=_x;y=_y;
         }
-        if(!NativeMethods.GetCursorPos(out var point)||!ContainsParkedPoint(x,y,point.X,point.Y))return;
+        if(requireParked&&(!NativeMethods.GetCursorPos(out var point)||!ContainsParkedPoint(x,y,point.X,point.Y)))return;
         try{_window!.ShowAt(x,y,()=>{lock(_gate)return generation==_generation&&_visible&&!_disposed;});}
         catch(System.ComponentModel.Win32Exception ex){_window!.Hide();_log($"光标停放失败：{ex.Message}");}
     }
@@ -120,6 +120,9 @@ internal sealed class CursorParking : IDisposable
         var right=new System.Drawing.Point(screen.Right-1-insetX,left.Y);
         return !bounds.Contains(right)?right:top;
     }
+    internal static bool ShouldDeferShield(System.Drawing.Rectangle screen,System.Drawing.Point point)
+        => point!=SelectParkingPoint(screen,null);
+
     [StructLayout(LayoutKind.Sequential)]private struct WindowRect{public int Left,Top,Right,Bottom;}
     [DllImport("user32.dll")]private static extern nint WindowFromPoint(NativeMethods.Point point);
     [DllImport("user32.dll")]private static extern nint GetAncestor(nint window,uint flags);
