@@ -13,6 +13,7 @@ internal sealed class CursorParking : IDisposable
     private readonly Action<string> _log;
     private Forms.Control? _dispatcher;
     private ParkingWindow? _window;
+    private Forms.Timer? _showTimer;
     private long _generation;
     private bool _visible,_disposed;
     private int _x,_y;
@@ -50,24 +51,28 @@ internal sealed class CursorParking : IDisposable
             if(_disposed){Forms.Application.ExitThread();return;}
             visible=_visible;x=_x;y=_y;
         }
-        // SendInput may wait for the hook; never hold _gate while injecting.
-        if(visible)
-        {
-            try
-            {
-                _window!.ShowAt(x,y,()=>
-                {
-                    lock(_gate)return generation==_generation&&_visible&&!_disposed;
-                });
-            }
-            catch(System.ComponentModel.Win32Exception ex)
-            {
-                _window!.Hide();
-                _log($"光标停放失败：{ex.Message}");
-            }
-        }
-        else _window!.Hide();
+        _showTimer!.Stop();
+        if(!visible){_window!.Hide();return;}
+        // Let USER32 deliver the geometric departure before putting a hider
+        // over the destination. Never sleep/wait in the input hook.
+        _pendingGeneration=generation;
+        _showTimer.Start();
     }
+    private long _pendingGeneration;
+    private void ShowPending()
+    {
+        _showTimer!.Stop();
+        int x,y;long generation=_pendingGeneration;
+        lock(_gate)
+        {
+            if(generation!=_generation||!_visible||_disposed)return;
+            x=_x;y=_y;
+        }
+        if(!NativeMethods.GetCursorPos(out var point)||!ContainsParkedPoint(x,y,point.X,point.Y))return;
+        try{_window!.ShowAt(x,y,()=>{lock(_gate)return generation==_generation&&_visible&&!_disposed;});}
+        catch(System.ComponentModel.Win32Exception ex){_window!.Hide();_log($"光标停放失败：{ex.Message}");}
+    }
+
     private void Run()
     {
         try
@@ -75,32 +80,50 @@ internal sealed class CursorParking : IDisposable
             using var dispatcher=new Forms.Control();
             _=dispatcher.Handle;
             using var window=new ParkingWindow();
+            using var timer=new Forms.Timer{Interval=120};
+            timer.Tick+=(_,_)=>ShowPending();
             lock(_gate)
             {
                 if(_disposed)return;
-                _dispatcher=dispatcher;_window=window;PostLocked();
+                _dispatcher=dispatcher;_window=window;_showTimer=timer;PostLocked();
             }
             Forms.Application.Run();
         }
         catch(Exception ex){_log($"光标停放窗口失败：{ex.Message}");}
-        finally{lock(_gate){_dispatcher=null;_window=null;}}
+        finally{lock(_gate){_dispatcher=null;_window=null;_showTimer=null;}}
     }
     public void Dispose(){lock(_gate){if(_disposed)return;_disposed=true;PostLocked();}}
 
-    // Must run on the window's own GUI thread. Never release a different
-    // window's capture, and never activate/focus the hider to acquire it.
-    internal static void AcquireParkingCapture(nint window)
+    internal static System.Drawing.Point ParkingPoint(System.Drawing.Rectangle screen)
     {
-        NativeMethods.SetCapture(window);
-        if(GetCapture()!=window)
-            throw new System.ComponentModel.Win32Exception("系统未将鼠标捕获交给光标停放窗口。");
+        System.Drawing.Rectangle? source=null;
+        if(NativeMethods.GetCursorPos(out var cursor))
+        {
+            var hit=WindowFromPoint(cursor);
+            var root=GetAncestor(hit,2); // GA_ROOT, including modern shell windows.
+            if(root!=0&&GetWindowRect(root,out var r)&&r.Right>r.Left&&r.Bottom>r.Top)
+                source=System.Drawing.Rectangle.FromLTRB(r.Left,r.Top,r.Right,r.Bottom);
+        }
+        return SelectParkingPoint(screen,source);
     }
-    internal static void ReleaseParkingCapture(nint window)
+    internal static System.Drawing.Point SelectParkingPoint(System.Drawing.Rectangle screen,System.Drawing.Rectangle? source)
     {
-        if(GetCapture()==window&&!NativeMethods.ReleaseCapture())
-            throw new System.ComponentModel.Win32Exception("系统未释放光标停放窗口的鼠标捕获。");
+        int insetX=Math.Min(4,(screen.Width-1)/2),insetY=Math.Min(4,(screen.Height-1)/2);
+        var top=new System.Drawing.Point(screen.Left+screen.Width/2,screen.Top+insetY);
+        if(source is not {} bounds||!bounds.Contains(top))return top;
+        // Covering a point is not a geometric pointer exit for modern shell
+        // controls. Prefer a real departure when the screen provides one.
+        var bottom=new System.Drawing.Point(top.X,screen.Bottom-1-insetY);
+        if(!bounds.Contains(bottom))return bottom;
+        var left=new System.Drawing.Point(screen.Left+insetX,screen.Top+screen.Height/2);
+        if(!bounds.Contains(left))return left;
+        var right=new System.Drawing.Point(screen.Right-1-insetX,left.Y);
+        return !bounds.Contains(right)?right:top;
     }
-    [DllImport("user32.dll")] private static extern nint GetCapture();
+    [StructLayout(LayoutKind.Sequential)]private struct WindowRect{public int Left,Top,Right,Bottom;}
+    [DllImport("user32.dll")]private static extern nint WindowFromPoint(NativeMethods.Point point);
+    [DllImport("user32.dll")]private static extern nint GetAncestor(nint window,uint flags);
+    [DllImport("user32.dll")]private static extern bool GetWindowRect(nint window,out WindowRect rect);
 
     private sealed class ParkingWindow : Forms.NativeWindow,IDisposable
     {
@@ -118,17 +141,12 @@ internal sealed class CursorParking : IDisposable
             if(isCurrent()&&NativeMethods.GetCursorPos(out var point)
                 && ContainsParkedPoint(x,y,point.X,point.Y))
             {
-                // Deskflow's secondary-screen hider explicitly owns capture.
-                // An overlay/hit test alone is not an input ownership handoff.
-                AcquireParkingCapture(Handle);
-                if(!isCurrent()){ReleaseParkingCapture(Handle);return;}
                 NativeMethods.InjectMouse(0,0,0x2001);
                 SetCursor(0);
             }
         }
         internal void Hide()
         {
-            ReleaseParkingCapture(Handle);
             ShowWindow(Handle,0);
             SetCursor(LoadCursor(0,new nint(32512)));
         }

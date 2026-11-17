@@ -278,7 +278,8 @@ internal sealed class InputRouter : IDisposable
         var screen=System.Windows.Forms.Screen.AllScreens.OrderBy(s=>s.Bounds.Top).ThenByDescending(s=>s.Primary).FirstOrDefault();
         if(screen is null)return;
         var bounds=screen.Bounds;
-        int x=bounds.Left+bounds.Width/2,y=bounds.Top+Math.Min(4,bounds.Height-1);
+        var point=CursorParking.ParkingPoint(bounds);
+        int x=point.X,y=point.Y;
         _parking.Show(x,y);
         try{NativeMethods.MoveCursor(x,y);}
         catch(System.ComponentModel.Win32Exception ex){RestoreParking();_log($"无法停放光标：{ex.Message}");}
