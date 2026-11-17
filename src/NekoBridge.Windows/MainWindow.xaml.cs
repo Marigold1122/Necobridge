@@ -76,7 +76,7 @@ namespace NekoBridge.Windows
         void ApplyTheme(bool dark)
         {
             var m = (dark
-                ? new[] { ("Ink", "#F1EBE4"), ("Ink70", "#B9B4AE"), ("Muted", "#7C7A80"), ("Paper", "#171B24"), ("Paper2", "#1F2531"), ("Line", "#2C3444"), ("Lime", "#AFDC3C"), ("LimeDeep", "#C6EC6A"), ("LimeWash", "#232D1E"), ("Vein", "#D4736E") }
+                ? new[] { ("Ink", "#F1EBE4"), ("Ink70", "#B9B4AE"), ("Muted", "#7C7A80"), ("Paper", "#000000"), ("Paper2", "#181818"), ("Line", "#303030"), ("Lime", "#AFDC3C"), ("LimeDeep", "#C6EC6A"), ("LimeWash", "#232D1E"), ("Vein", "#D4736E") }
                 : new[] { ("Ink", "#1B2130"), ("Ink70", "#4E5464"), ("Muted", "#8B8A93"), ("Paper", "#FBF8F4"), ("Paper2", "#F1EBE4"), ("Line", "#E0D8CF"), ("Lime", "#AFDC3C"), ("LimeDeep", "#58790F"), ("LimeWash", "#EFF7DB"), ("Vein", "#9E3B38") });
             foreach (var (key, value) in m) Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
             Resources["GridBrush"] = MakeGrid();
