@@ -6,9 +6,11 @@ namespace NekoBridge.Windows;
 internal static class DragDiagnostics
 {
     private static readonly object Gate=new();
-    internal static void Failure(string stage,Exception error)
-        => Write($"{stage} {error.GetType().FullName} HRESULT=0x{error.HResult:X8}");
+    internal static void Failure(string stage,Exception error,Guid? session=null)
+        => Write($"{(session is {} id?$"{id:N} ":"")}{stage} {error.GetType().FullName} HRESULT=0x{error.HResult:X8}");
     internal static void Stage(Guid session,string stage)=>Write($"{session:N} {stage}");
+    internal static void Cursor(Guid session,string stage)
+        => Stage(session,Input.NativeMethods.GetCursorPos(out var point)?$"{stage} cursor=({point.X},{point.Y})":$"{stage} cursor=unavailable");
     private static void Write(string entry)
     {
         lock(Gate)

@@ -5,6 +5,49 @@ using System.Security.Cryptography.X509Certificates;
 using NekoBridge.Core;
 
 if (args.Contains("--layout-only")) { LayoutSmoke.Run(); return 0; }
+if (args.Contains("--drag-control-only"))
+{
+    using var certA = Identity("DragControl-A");
+    using var certB = Identity("DragControl-B");
+    AppSettings settingsA = Settings("A"), settingsB = Settings("B");
+    await using var a = new BridgeNode(settingsA, certA, () => { });
+    await using var b = new BridgeNode(settingsB, certB, () => { });
+    using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    var ct = deadline.Token;
+    await a.StartAsync(ct); await b.StartAsync(ct); b.PairingEnabled = true;
+    await a.ConnectAsync(Address(settingsB), b.PairingKey, ct);
+    async Task Relay(BridgeNode sender, BridgeNode receiver, ControlMessage outgoing)
+    {
+        var received = new TaskCompletionSource<ControlMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Observe(Guid peer, ControlMessage message)
+        {
+            if (peer == sender.LocalId) received.TrySetResult(message);
+        }
+        receiver.MessageReceived += Observe;
+        try
+        {
+            await sender.SendAsync(receiver.LocalId, outgoing, ct);
+            var incoming = await received.Task.WaitAsync(ct);
+            Require(incoming.Kind == outgoing.Kind && incoming.Id == outgoing.Id && incoming.Payload == outgoing.Payload, "拖放控制消息完整送达");
+        }
+        finally { receiver.MessageReceived -= Observe; }
+    }
+    Guid offer = Guid.NewGuid();
+    for (int i = 0; i < 8; i++)
+    {
+        Guid session = Guid.NewGuid();
+        await Relay(a, b, new() { Kind = "prepare-source3", Id = session, Payload = offer.ToString() });
+        await Relay(b, a, new() { Kind = "dragready", Id = session });
+    }
+    await Relay(a, b, new() { Kind = "finish-source3", Id = offer });
+    bool rejected = false;
+    try { await a.SendAsync(b.LocalId, new() { Kind = "not-a-control-event" }, ct); }
+    catch (InvalidDataException) { rejected = true; }
+    Require(rejected, "未知事件仍须拒绝");
+    await Relay(a, b, new() { Kind = "move", X = 123, Y = 456 });
+    Console.WriteLine("PASS eight source resumes, finish and subsequent input over paired TLS; unknown event rejected");
+    return 0;
+}
 
 string root = Path.Combine(Path.GetTempPath(), "NekoBridge-CoreSmoke-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);

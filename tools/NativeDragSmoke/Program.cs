@@ -16,6 +16,12 @@ internal static class Program
 {
     [STAThread] static int Main(string[] args)
     {
+        if (Array.IndexOf(args,"--local-data-only")>=0) return CheckLocalData();
+        if (Array.IndexOf(args,"--handoff-input-only")>=0)
+        {
+            try{CheckHandoffInput().GetAwaiter().GetResult();return 0;}
+            catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
+        }
         bool restoreCursor=Array.IndexOf(args,"--shell-only")<0;
         NekoBridge.Windows.Input.NativeMethods.GetCursorPos(out var originalCursor);
         using var watchdog=new System.Threading.Timer(_=>{if(restoreCursor){NekoBridge.Windows.Input.NativeMethods.InjectMouse(0,0,4);NekoBridge.Windows.Input.NativeMethods.MoveCursor(originalCursor.X,originalCursor.Y);}Console.Error.WriteLine("FAIL native smoke exceeded 10s; mouse released");Environment.Exit(2);},null,10000,Timeout.Infinite);
@@ -24,6 +30,34 @@ internal static class Program
         try{Run(root,Array.IndexOf(args,"--shell-only")>=0,Array.IndexOf(args,"--receiver-only")>=0).GetAwaiter().GetResult();Console.WriteLine("NATIVE DATA OBJECT SMOKE PASSED");return 0;}
         catch(Exception ex){Console.Error.WriteLine(ex.ToString());return 1;}
         finally{if(restoreCursor){NekoBridge.Windows.Input.NativeMethods.InjectMouse(0,0,4);NekoBridge.Windows.Input.NativeMethods.MoveCursor(originalCursor.X,originalCursor.Y);}Directory.Delete(root,true);}
+    }
+    static async Task CheckHandoffInput()
+    {
+        using var cert=Identity("HandoffInputSmoke");
+        await using var node=new BridgeNode(new AppSettings{DeviceName="HandoffInputSmoke",Port=Port()},cert,()=>{});
+        using var router=new NekoBridge.Windows.Input.InputRouter(node,Console.WriteLine);
+        await router.Ready.WaitAsync(TimeSpan.FromSeconds(2));
+        HandoffInputSmoke.Check(router,node.LocalId,Guid.NewGuid());
+    }
+    static int CheckLocalData()
+    {
+        string root=Directory.CreateTempSubdirectory("NekoBridge-LocalDrop-").FullName;
+        try
+        {
+            string file=Path.Combine(root,"source.txt"),folder=Path.Combine(root,"folder");
+            File.WriteAllText(file,"source");Directory.CreateDirectory(folder);
+            IDataObject data=NativeDragBridge.CreateLocalDropData(new[]{file,folder});
+            var format=new FORMATETC{cfFormat=15,dwAspect=DVASPECT.DVASPECT_CONTENT,lindex=-1,tymed=TYMED.TYMED_HGLOBAL};
+            if(data.QueryGetData(ref format)!=0)throw new IOException("Local OLE payload does not expose CF_HDROP");
+            data.GetData(ref format,out var medium);
+            try
+            {
+                if(medium.tymed!=TYMED.TYMED_HGLOBAL||medium.unionmember==IntPtr.Zero)throw new IOException("Local file-drop payload is empty");
+            }
+            finally{ReleaseStgMedium(ref medium);}
+            Console.WriteLine("PASS local OLE file/folder payload; no input injected");return 0;
+        }
+        finally{Directory.Delete(root,true);}
     }
     static async Task Run(string root,bool shellOnly,bool receiverOnly)
     {
@@ -76,10 +110,13 @@ internal static class Program
         await router.Ready.WaitAsync(TimeSpan.FromSeconds(2));
         router.RemoteLeftChanged+=bridge.UpdateRemoteButton;
         router.CancelDragRequested+=bridge.CancelRemoteDrag;
-        await NativeDropSmoke.Check(bridge,router,b.LocalId,directoryOffer.Id,Path.Combine(root,"native-cancel-target"),expectedTree,false,true);
+        for(int i=0;i<7;i++)
+            await NativeDropSmoke.Check(bridge,router,b.LocalId,directoryOffer.Id,Path.Combine(root,$"native-cancel-target-{i}"),expectedTree,i%2!=0,true);
         await NativeDropSmoke.Check(bridge,router,b.LocalId,directoryOffer.Id,Path.Combine(root,"native-loop-left-target"),expectedTree,false);
         await NativeDropSmoke.Check(bridge,router,b.LocalId,directoryOffer.Id,Path.Combine(root,"native-loop-right-target"),expectedTree,true);
+        await NativeDropSmoke.Check(bridge,router,b.LocalId,Guid.Empty,Path.Combine(root,"native-return-source-target"),expectedTree,false,localPaths:new[]{folder,zero});
         if(!File.ReadAllBytes(Path.Combine(folder,"nested","payload.txt")).AsSpan().SequenceEqual(bytes)||!File.Exists(zero))throw new IOException("Native drop changed source files");
+        HandoffInputSmoke.Check(router,a.LocalId,b.LocalId);
         Console.WriteLine("PASS native drag cancellation without dropping on user desktop");
     }
     static void CheckNative(VirtualFileDataObject data,byte[] expected,string root)

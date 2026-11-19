@@ -169,7 +169,10 @@ internal sealed class InputRouter : IDisposable
             {
                 _log($"光标隐藏结束：本机输入 {e.Kind}。");RestoreParking();
             }
-            if(_dragStarting&&e.Kind=="move")return true;
+            // Keep the entry point stable until the destination OLE session starts.
+            // Pre-switch coordinates can still be queued in the hook, and a move
+            // at the destination can race between helper hit-testing and button-down.
+            if(e.Kind=="move"&&_dragStarting)return true;
             if(_active==_node.LocalId)
             {
                 if(e.Kind=="move"&&!_edgePending&&!_dragCrossingBlocked)

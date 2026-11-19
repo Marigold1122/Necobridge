@@ -12,7 +12,7 @@ using NekoBridge.Windows.Input;
 
 internal static class NativeDropSmoke
 {
-    internal static async Task Check(NativeDragBridge bridge,InputRouter router,Guid peer,Guid offer,string destination,IReadOnlyDictionary<string,byte[]?> expected,bool rightEdge,bool cancel=false)
+    internal static async Task Check(NativeDragBridge bridge,InputRouter router,Guid peer,Guid offer,string destination,IReadOnlyDictionary<string,byte[]?> expected,bool rightEdge,bool cancel=false,IReadOnlyList<string>? localPaths=null)
     {
         var ready=new TaskCompletionSource<(Forms.Form Window,Point Center)>(TaskCreationOptions.RunContinuationsAsynchronously);
         var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -55,9 +55,15 @@ internal static class NativeDropSmoke
             var prepared=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var started=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var commit=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            operation=bridge.BeginRemoteDragAsync(peer,offer,prepared,commit.Task,started,timeout.Token);
-            await prepared.Task.WaitAsync(timeout.Token);commit.TrySetResult();
+            operation=bridge.BeginRemoteDragAsync(peer,offer,prepared,commit.Task,started,timeout.Token,localPaths);
+            await prepared.Task.WaitAsync(timeout.Token);
+            var startup=System.Diagnostics.Stopwatch.StartNew();
+            commit.TrySetResult();
+            // Move before startup acknowledgement: the starter must use the
+            // latest target position, not pin the pointer to the entry edge.
+            router.Accept(peer,new ControlMessage{Kind="move",X=target.Center.X-router.Left,Y=target.Center.Y-router.Top});
             await started.Task.WaitAsync(timeout.Token);
+            Console.WriteLine($"OLE commit to first feedback: {startup.Elapsed.TotalMilliseconds:F1} ms");
             // Reassert the dedicated target after the IDE/tool host may take focus.
             // Never release unless the native hit-test belongs to our test window.
             var foreground=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -73,13 +79,17 @@ internal static class NativeDropSmoke
             await entered.Task.WaitAsync(timeout.Token);
             if(cancel)
             {
-                bridge.CancelRemoteDrag();
+                router.Accept(peer,new ControlMessage{Kind="leave",Flags=1});
+                router.Accept(peer,new ControlMessage{Kind="enter",X=target.Center.X+12-router.Left,Y=target.Center.Y-router.Top});
                 try{await operation.WaitAsync(TimeSpan.FromSeconds(3));}catch(OperationCanceledException){}
                 if(dropped.Task.IsCompleted)throw new InvalidOperationException("Cancelled session reached Shell Drop");
-                Console.WriteLine("PASS receiver native cancellation wakes OLE and exits without Shell Drop");
+                if(!NativeMethods.GetCursorPos(out var returned)||Math.Abs(returned.X-target.Center.X-12)>1||Math.Abs(returned.Y-target.Center.Y)>1)
+                    throw new InvalidOperationException("Old OLE session moved the cursor after re-entry");
+                Console.WriteLine("PASS native leave and immediate re-entry preserve the new cursor position without dropping");
                 return;
             }
-            router.Accept(peer,new ControlMessage{Kind="button",Data=1,Flags=1});
+            if(localPaths!=null)await ReleaseThroughHook(bridge,timeout.Token);
+            else router.Accept(peer,new ControlMessage{Kind="button",Data=1,Flags=1});
             await operation.WaitAsync(timeout.Token);
             await dropped.Task.WaitAsync(timeout.Token);
             ShellDrop.Verify(destination,expected);
@@ -97,6 +107,26 @@ internal static class NativeDropSmoke
             await closed.Task.WaitAsync(TimeSpan.FromSeconds(1));
         }
     }
+    private static async Task ReleaseThroughHook(NativeDragBridge bridge,CancellationToken ct)
+    {
+        const uint marker=0x4E425453;
+        var seen=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var hook=new InputHooks(input=>
+        {
+            if(input.SourceExtraInfo!=marker||input.Kind!="button"||input.Data!=1||input.Flags!=1)return false;
+            bridge.UpdateRemoteButton(false);
+            seen.TrySetResult();
+            return true; // OLE must finish via the bridge, not this test event.
+        },Console.WriteLine);
+        await hook.Ready.WaitAsync(ct);
+        var release=new NativeMethods.Input{Type=0,Union=new NativeMethods.InputUnion{Mouse=new NativeMethods.MouseInput{Flags=4,ExtraInfo=marker}}};
+        if(SendInput(1,ref release,Marshal.SizeOf<NativeMethods.Input>())!=1)
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        await seen.Task.WaitAsync(ct);
+        Console.WriteLine("PASS low-level hook returned from local drag release");
+    }
+    [DllImport("user32.dll",SetLastError=true)] private static extern uint SendInput(uint count,ref NativeMethods.Input input,int size);
+
     [ComVisible(true),ClassInterface(ClassInterfaceType.None)]
     private sealed class Target(ShellDrop.IDropTarget shell,TaskCompletionSource entered,TaskCompletionSource dropped):ShellDrop.IDropTarget
     {

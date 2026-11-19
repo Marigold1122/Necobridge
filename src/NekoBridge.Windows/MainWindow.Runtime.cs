@@ -48,12 +48,16 @@ public partial class MainWindow : Window
     private IncomingDrag? _incoming;
     private Guid _targetSession;
     private (Guid Peer,Guid Session,Guid Offer) _sourceCapture;
+    private IReadOnlyList<string>? _sourceCapturePaths;
+    private (Guid Peer,Guid Session,Guid Offer,IReadOnlyList<string> Paths,DateTime Expires)? _resumableSource;
+    private readonly Dictionary<Guid, FileOffer> _dragOffers=new();
     private sealed class IncomingDrag(Guid peer,Guid id,CancellationToken lifetime)
     {
         internal readonly Guid Peer=peer, Id=id;
         internal readonly CancellationTokenSource Stop=CancellationTokenSource.CreateLinkedTokenSource(lifetime);
         internal readonly TaskCompletionSource Ready=new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource Started=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal readonly TaskCompletionSource Closed=new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal readonly TaskCompletionSource Commit=new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal string? CancelReason { get; private set; }
         private bool _closed;
@@ -63,7 +67,7 @@ public partial class MainWindow : Window
             CancelReason??=reason;
             Stop.Cancel();
         }
-        internal void Close(){_closed=true;Stop.Dispose();}
+        internal void Close(){_closed=true;Stop.Dispose();Closed.TrySetResult();}
     }
     private bool _initialized,_quitting,_busyCrossing,_uiReady,_started;
     private string? _startupError;
@@ -104,7 +108,7 @@ public partial class MainWindow : Window
         _router.PhysicalLeftChanged+=down=>
         {
             if(_router.ActiveId==_node.LocalId)_drag.UpdateRemoteButton(down);
-            if(!down)UI(()=>{if(!_crossCommitted)_crossStop?.Cancel();_logicalPaths=null;_logicalOffer=Guid.Empty;_logicalSource=Guid.Empty;});
+            if(!down)UI(()=>{if(!_crossCommitted)_crossStop?.Cancel();ClearLogicalDrag();});
         };
         _router.CancelDragRequested+=()=>
         {
@@ -319,7 +323,7 @@ public partial class MainWindow : Window
                 case "captured2":case "dragready":case "started2":case "released2":
                     if(_dragReplies.TryGetValue((peer,m.Id,m.Kind),out var reply))reply.TrySetResult(m);
                     break;
-                case "prepare2":await PrepareTarget(peer,m);break;
+                case "prepare2":case "prepare-source3":await PrepareTarget(peer,m);break;
                 case "commit2":
                     if(_incoming is { } incoming&&incoming.Peer==peer&&incoming.Id==m.Id&&_router.OwnerId==peer)
                         CommitTarget(incoming);
@@ -331,7 +335,10 @@ public partial class MainWindow : Window
                         {
                             if(_sourceCapture.Offer==Guid.Empty||!NativeDragBridge.SystemLeftDown)
                                 throw new IOException("源端左键已松开，无法交接。");
-                            _router.ReleaseSourceDrag();_sourceCapture=default;
+                            var paths=_sourceCapturePaths??throw new IOException("源端缺少本地拖放路径。");
+                            var offer=_sourceCapture.Offer;
+                            _router.ReleaseSourceDrag();_sourceCapture=default;_sourceCapturePaths=null;
+                            _resumableSource=(peer,m.Id,offer,paths,DateTime.UtcNow.AddHours(1));
                             SendObserved(peer,new ControlMessage{Kind="released2",Id=m.Id});
                         }
                         catch(Exception ex)
@@ -342,7 +349,11 @@ public partial class MainWindow : Window
                         }
                     }
                     break;
+                case "finish-source3":
+                    if(_resumableSource is {} finished&&finished.Peer==peer&&finished.Offer==m.Id)_resumableSource=null;
+                    break;
                 case "abort2":
+                    if(_resumableSource is {} abandoned&&abandoned.Peer==peer&&abandoned.Session==m.Id)_resumableSource=null;
                     if(_incoming is { } aborted&&aborted.Peer==peer&&aborted.Id==m.Id)aborted.Cancel("主控端取消交接");
                     if(_sourceCapture.Peer==peer&&_sourceCapture.Session==m.Id)
                     AbortSourceCapture();
@@ -376,7 +387,19 @@ public partial class MainWindow : Window
             if(response.Flags!=0)throw new IOException(response.Text??"对端拒绝拖放。");
             return response;
         }
-        catch(TimeoutException){throw new IOException("对端未确认拖放，请检查连接并更新两端版本。");}
+        catch(TimeoutException ex)
+        {
+            DragDiagnostics.Failure("reply-timeout-"+kind,ex,id);
+            string phase=kind switch
+            {
+                "captured2"=>"来源文件捕获",
+                "dragready"=>"目标准备",
+                "released2"=>"来源释放",
+                "started2"=>"目标原生拖放启动",
+                _=>"拖放交接"
+            };
+            throw new IOException($"{phase}超时：未收到对端确认。",ex);
+        }
         finally{_dragReplies.Remove(key);}
     }
     private async Task<IReadOnlyList<string>> CaptureSource(CancellationToken ct)
@@ -419,21 +442,18 @@ public partial class MainWindow : Window
                 }
             }
             Held();
-            if(to==source)
-            {
-                if(!_router.CompleteCrossing(to,x,y,true,generation,beforeDragSwitch:()=>{if(from==_node.LocalId)_drag.CancelRemoteDrag();}))throw new OperationCanceledException();
-                success=true;CancelDrag();Log("已回到文件来源电脑，本次跨机拖放已取消。");return;
-            }
             if(to==_node.LocalId)
             {
-                local=StartTarget(_node.LocalId,id,source,sourceOffer);
+                local=await StartTargetAsync(_node.LocalId,id,source,sourceOffer,to==source?paths:null,ct);
                 await local.Ready.Task.WaitAsync(TimeSpan.FromSeconds(5),ct);
             }
             else
             {
-                offer=paths!=null?await Task.Run(()=>_node.CreateOffer(to,paths),ct):_node.CreateRelayOffer(to,source,await _node.GetOfferAsync(source,sourceOffer,ct));
+                bool returning=to==source;
+                if(!returning&&!_dragOffers.TryGetValue(to,out offer))
+                    offer=paths!=null?await Task.Run(()=>_node.CreateOffer(to,paths),ct):_node.CreateRelayOffer(to,source,await _node.GetOfferAsync(source,sourceOffer,ct));
                 Held();preparing=true;
-                await RequestDrag(to,id,"dragready",()=>_router.SendOrdered(to,new ControlMessage{Kind="prepare2",Id=id,Payload=offer.Id.ToString()}),ct);
+                await RequestDrag(to,id,"dragready",()=>_router.SendOrdered(to,new ControlMessage{Kind=returning?"prepare-source3":"prepare2",Id=id,Payload=(returning?sourceOffer:offer!.Id).ToString()}),ct);
             }
             Held();
             if(capture!=Guid.Empty)
@@ -457,30 +477,38 @@ public partial class MainWindow : Window
             }
             if(local!=null)
             {
+                DragDiagnostics.Cursor(id,$"local-before-switch entry=({_router.Left+x},{_router.Top+y})");
                 Switch(null);CommitTarget(local);
                 await local.Started.Task.WaitAsync(TimeSpan.FromSeconds(5),ct);
+                DragDiagnostics.Cursor(id,"local-started");
             }
             else await RequestDrag(to,id,"started2",()=>Switch(new ControlMessage{Kind="commit2",Id=id}),ct);
-            _router.DragStarted();
             _logicalSource=source;_logicalPaths=paths;_logicalOffer=sourceOffer;
+            if(offer!=null)_dragOffers[to]=offer;
             _currentDragTarget=to;_targetSession=id;success=true;
-            if(!_router.LeftDown){_logicalPaths=null;_logicalOffer=Guid.Empty;_logicalSource=Guid.Empty;}
+            if(!_router.LeftDown){ClearLogicalDrag();}
         }
         catch(OperationCanceledException){if(!_quitting)Log("跨屏拖放已取消：按钮已松开或控制会话已改变。");}
-        catch(Exception ex){DragDiagnostics.Failure("cross-edge",ex);Log($"跨屏拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");}
+        catch(Exception ex){DragDiagnostics.Failure("cross-edge",ex,id);Log($"跨屏拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");}
         finally
         {
             if(left&&!success)
             {
+                DragDiagnostics.Cursor(id,switched?"cross-abort-after-switch":"cross-abort-before-switch");
                 if(_router.Generation==generation)_router.CancelCrossing();
                 if(local!=null&&ReferenceEquals(_incoming,local))local.Cancel("主控端交接未完成");
                 if(preparing)_router.SendOrdered(to,new ControlMessage{Kind="abort2",Id=id});
-                if(offer!=null)_node.RevokeOffer(offer.Id);
+                if(offer!=null){_dragOffers.Remove(to);_node.RevokeOffer(offer.Id);}
                 if(capture!=Guid.Empty)_router.SendOrdered(from,new ControlMessage{Kind="abort2",Id=capture});
-                if(switched&&_router.ActiveId==to){_router.ReturnLocal();CancelDrag();}
+                if(switched&&_router.ActiveId==to)
+                {
+                    DragDiagnostics.Cursor(id,"cross-before-return-local");
+                    _router.ReturnLocal();CancelDrag();
+                    DragDiagnostics.Cursor(id,"cross-after-return-local");
+                }
             }
-            _router.DragStarted();
             _crossStop=null;_crossCommitted=false;_busyCrossing=false;
+            _router.DragStarted();
         }
         void Held()
         {
@@ -502,13 +530,13 @@ public partial class MainWindow : Window
             offer=await Task.Run(()=>_node.CreateOffer(peer,paths),stop.Token);
             stop.Token.ThrowIfCancellationRequested();
             if(_sourceCapture!=(peer,request.Id,Guid.Empty)||_router.OwnerId!=peer||!NativeDragBridge.SystemLeftDown)throw new OperationCanceledException();
-            _sourceCapture=(peer,request.Id,offer.Id);
+            _sourceCapture=(peer,request.Id,offer.Id);_sourceCapturePaths=paths;
             await _node.SendAsync(peer,new ControlMessage{Kind="captured2",Id=request.Id,Payload=offer.Id.ToString()},_lifetime.Token);
         }
         catch(Exception ex)
         {
             if(offer!=null)_node.RevokeOffer(offer.Id);
-            if(_sourceCapture.Session==request.Id)_sourceCapture=default;
+            if(_sourceCapture.Session==request.Id){_sourceCapture=default;_sourceCapturePaths=null;}
             DragDiagnostics.Failure("source-capture",ex);
             Log($"源端拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");
             SendObserved(peer,new ControlMessage{Kind="captured2",Id=request.Id,Flags=1,Text="源端未能准备文件，请检查源端提示。"});
@@ -519,22 +547,38 @@ public partial class MainWindow : Window
     {
         _sourceCaptureStop?.Cancel();
         if(_sourceCapture.Offer!=Guid.Empty)_node.RevokeOffer(_sourceCapture.Offer);
-        _sourceCapture=default;
+        _sourceCapture=default;_sourceCapturePaths=null;
     }
-    private IncomingDrag StartTarget(Guid peer,Guid id,Guid source,Guid offer)
+    private async Task<IncomingDrag> StartTargetAsync(Guid peer,Guid id,Guid source,Guid offer,IReadOnlyList<string>? localPaths,CancellationToken ct)
     {
-        if(_incoming!=null)throw new IOException("目标已有拖放会话。");
+        ct.ThrowIfCancellationRequested();
+        var previous=_incoming;
+        if(previous!=null&&!previous.Stop.IsCancellationRequested)throw new IOException("目标已有拖放会话。");
         var incoming=new IncomingDrag(peer,id,_lifetime.Token);
-        _incoming=incoming;
+        _incoming=incoming; // Make the new request cancellable while the old OLE loop unwinds.
         incoming.Stop.CancelAfter(TimeSpan.FromSeconds(12));
-        RunTarget(incoming,source,offer);
-        return incoming;
+        try
+        {
+            using var readyStop=CancellationTokenSource.CreateLinkedTokenSource(ct,incoming.Stop.Token);
+            if(previous!=null)await previous.Closed.Task.WaitAsync(TimeSpan.FromSeconds(2),readyStop.Token);
+            readyStop.Token.ThrowIfCancellationRequested();
+            if(peer!=_node.LocalId&&(_router.Paused||_router.ActiveId!=_node.LocalId||(_router.OwnerId!=Guid.Empty&&_router.OwnerId!=peer)))
+                throw new IOException("等待期间目标控制权已变化。");
+            RunTarget(incoming,source,offer,localPaths);
+            return incoming;
+        }
+        catch
+        {
+            if(ReferenceEquals(_incoming,incoming))_incoming=previous is { }&& !previous.Closed.Task.IsCompleted?previous:null;
+            incoming.Close();
+            throw;
+        }
     }
-    private async void RunTarget(IncomingDrag incoming,Guid source,Guid offer)
+    private async void RunTarget(IncomingDrag incoming,Guid source,Guid offer,IReadOnlyList<string>? localPaths)
     {
         try
         {
-            var operation=_drag.BeginRemoteDragAsync(source,offer,incoming.Ready,incoming.Commit.Task,incoming.Started,incoming.Stop.Token);
+            var operation=_drag.BeginRemoteDragAsync(source,offer,incoming.Ready,incoming.Commit.Task,incoming.Started,incoming.Stop.Token,localPaths,incoming.Id);
             try
             {
                 await incoming.Started.Task;
@@ -543,7 +587,7 @@ public partial class MainWindow : Window
             finally{await operation;}
         }
         catch(OperationCanceledException){}
-        catch(Exception ex){DragDiagnostics.Failure("native-target",ex);Log($"原生拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");}
+        catch(Exception ex){DragDiagnostics.Failure("native-target",ex,incoming.Id);Log($"原生拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");}
         finally
         {
             incoming.Ready.TrySetCanceled();incoming.Started.TrySetCanceled();
@@ -554,7 +598,7 @@ public partial class MainWindow : Window
     private void CommitTarget(IncomingDrag incoming)
     {
         if(!incoming.Ready.Task.IsCompletedSuccessfully||incoming.Stop.IsCancellationRequested||incoming.Commit.Task.IsCompleted)return;
-        DragDiagnostics.Stage(incoming.Id,"target-commit");
+        DragDiagnostics.Cursor(incoming.Id,"target-commit");
         incoming.Commit.TrySetResult();
     }
     private async Task PrepareTarget(Guid peer,ControlMessage m)
@@ -566,12 +610,27 @@ public partial class MainWindow : Window
             if(_router.Paused||(_router.OwnerId!=Guid.Empty&&_router.OwnerId!=peer)||_router.ActiveId!=_node.LocalId||m.Id==Guid.Empty||!Guid.TryParse(m.Payload,out var offer)||offer==Guid.Empty)
                 throw new IOException("目标端不可接管拖放或请求无效。");
             DragDiagnostics.Stage(m.Id,"target-prepare");
-            incoming=StartTarget(peer,m.Id,peer,offer);
+            IReadOnlyList<string>? localPaths=null;
+            if(m.Kind=="prepare-source3")
+            {
+                if(_resumableSource is not {} saved||saved.Peer!=peer||saved.Offer!=offer||saved.Expires<=DateTime.UtcNow)
+                    throw new IOException("没有与本次拖放匹配的来源文件。");
+                localPaths=saved.Paths;
+            }
+            incoming=await StartTargetAsync(peer,m.Id,peer,offer,localPaths,_lifetime.Token);
+            var startupToken=incoming.Stop.Token;
             await incoming.Ready.Task;
             DragDiagnostics.Stage(m.Id,"target-ready");
             await _node.SendAsync(peer,new ControlMessage{Kind="dragready",Id=m.Id},_lifetime.Token);
             ready=true;
-            await incoming.Started.Task;
+            // A startup failure or cancellation can complete Started before Commit.
+            await Task.WhenAny(incoming.Commit.Task,incoming.Started.Task).WaitAsync(startupToken);
+            // Once committed, use a shorter local deadline than the controller
+            // so a stalled native startup can report failure instead of leaving
+            // the controller waiting with reverse crossing disabled.
+            try{await incoming.Started.Task.WaitAsync(TimeSpan.FromSeconds(2),startupToken);}
+            catch(TimeoutException ex){throw new IOException("目标端原生拖放启动超时。",ex);}
+            DragDiagnostics.Cursor(m.Id,"target-started");
             await _node.SendAsync(peer,new ControlMessage{Kind="started2",Id=m.Id},_lifetime.Token);
         }
         catch(OperationCanceledException) when(_quitting||incoming?.CancelReason!=null)
@@ -583,16 +642,24 @@ public partial class MainWindow : Window
             if(incoming!=null&&ReferenceEquals(_incoming,incoming))incoming.Cancel("目标端启动失败");
             var failure=ex is OperationCanceledException
                 ?new OperationCanceledException("目标拖放在启动确认前已结束；请保持左键按住到跨屏完成。",ex):ex;
-            DragDiagnostics.Failure("target-prepare",failure);
+            DragDiagnostics.Failure(ready?"target-start":"target-prepare",failure,m.Id);
             Log($"目标端拖放失败 [0x{failure.HResult:X8}]：{failure.Message}");
-            SendObserved(peer,new ControlMessage{Kind=ready?"started2":"dragready",Id=m.Id,Flags=1,Text="目标未能准备或启动原生拖放，请检查目标端提示。"});
+            string text=ready?(failure.InnerException is TimeoutException?"目标端原生拖放启动超时。":"目标端未能启动原生拖放，请查看目标端提示。")
+                :"目标端未能准备原生拖放，请查看目标端提示。";
+            SendObserved(peer,new ControlMessage{Kind=ready?"started2":"dragready",Id=m.Id,Flags=1,Text=text});
         }
+    }
+    private void ClearLogicalDrag()
+    {
+        if(_logicalSource!=Guid.Empty&&_logicalSource!=_node.LocalId&&_logicalOffer!=Guid.Empty)
+            _router.SendOrdered(_logicalSource,new ControlMessage{Kind="finish-source3",Id=_logicalOffer});
+        _logicalPaths=null;_logicalOffer=Guid.Empty;_logicalSource=Guid.Empty;_dragOffers.Clear();
     }
     private void CancelDrag()
     {
         _router.CancelCrossing();_crossStop?.Cancel();_incoming?.Cancel("本机取消操作");_drag.CancelRemoteDrag();
-        AbortSourceCapture();
-        _logicalPaths=null;_logicalOffer=Guid.Empty;_logicalSource=Guid.Empty;
+        AbortSourceCapture();_resumableSource=null;
+        ClearLogicalDrag();
         if(_currentDragTarget!=Guid.Empty&&_currentDragTarget!=_node.LocalId)
             _router.SendOrdered(_currentDragTarget,new ControlMessage{Kind="abort2",Id=_targetSession});
         _currentDragTarget=Guid.Empty;_targetSession=Guid.Empty;

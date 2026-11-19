@@ -115,7 +115,7 @@ public sealed class NativeDragBridge : IDisposable
     private async Task CancelCaptureAsync() { try { await InvokeAsync(_ => CloseCapture()).ConfigureAwait(false); } catch (Exception ex) { SafeLog("关闭捕获窗口失败：" + ex.Message); } }
     private void CloseCapture() { capture?.Dispose(); capture = null; }
 
-    public async Task BeginRemoteDragAsync(Guid sourcePeer, Guid offerId, TaskCompletionSource prepared, Task commit, TaskCompletionSource started, CancellationToken ct)
+    public async Task BeginRemoteDragAsync(Guid sourcePeer, Guid offerId, TaskCompletionSource prepared, Task commit, TaskCompletionSource started, CancellationToken ct, IReadOnlyList<string>? localPaths = null, Guid? diagnosticId = null)
     {
         DragSession current;
         lock (gate)
@@ -128,23 +128,32 @@ public sealed class NativeDragBridge : IDisposable
             current = new DragSession(); session = current;
         }
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct, lifetime.Token, current.Stop.Token);
-        using CancellationTokenRegistration registration = stop.Token.Register(() => { current.Cancelled = true; Wake(current); });
+        using CancellationTokenRegistration registration = stop.Token.Register(() => { current.Cancelled = true; RequestWake(current); });
         try
         {
-            FileOffer offer = await node.GetOfferAsync(sourcePeer, offerId, stop.Token).ConfigureAwait(false);
-            stop.Token.ThrowIfCancellationRequested();
-            if (!current.Down) return;
-            var cache = new RemoteFileCache(node, sourcePeer, offerId, SafeLog);
-            VirtualFileDataObject data;
-            try { data = new VirtualFileDataObject(offer, cache, SafeLog); }
-            catch { cache.Dispose(); throw; }
-            lock (gate)
+            System.Runtime.InteropServices.ComTypes.IDataObject data;
+            VirtualFileDataObject? remoteData = null;
+            if (localPaths != null)
             {
-                if (disposed) { data.Abort(); throw new ObjectDisposedException(nameof(NativeDragBridge)); }
-                objects.RemoveAll(weak => !weak.TryGetTarget(out _));
-                caches.RemoveAll(weak => !weak.TryGetTarget(out _));
-                objects.Add(new WeakReference<VirtualFileDataObject>(data));
-                caches.Add(new WeakReference<RemoteFileCache>(cache));
+                data = CreateLocalDropData(localPaths);
+            }
+            else
+            {
+                FileOffer offer = await node.GetOfferAsync(sourcePeer, offerId, stop.Token).ConfigureAwait(false);
+                stop.Token.ThrowIfCancellationRequested();
+                if (!current.Down) return;
+                var cache = new RemoteFileCache(node, sourcePeer, offerId, SafeLog);
+                try { remoteData = new VirtualFileDataObject(offer, cache, SafeLog); }
+                catch { cache.Dispose(); throw; }
+                lock (gate)
+                {
+                    if (disposed) { remoteData.Abort(); throw new ObjectDisposedException(nameof(NativeDragBridge)); }
+                    objects.RemoveAll(weak => !weak.TryGetTarget(out _));
+                    caches.RemoveAll(weak => !weak.TryGetTarget(out _));
+                    objects.Add(new WeakReference<VirtualFileDataObject>(remoteData));
+                    caches.Add(new WeakReference<RemoteFileCache>(cache));
+                }
+                data = remoteData;
             }
             try
             {
@@ -154,19 +163,22 @@ public sealed class NativeDragBridge : IDisposable
                 var nativeDone=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 await InvokeAsync(window =>
                 {
-                    if (current.Cancelled || !current.Down) { data.Abort();nativeDone.TrySetCanceled();return; }
+                    if (current.Cancelled || !current.Down) { remoteData?.Abort();nativeDone.TrySetCanceled();return; }
                     CloseCapture();
                     if(!NativeMethods.GetCursorPos(out var cursor))throw new IOException("无法取得拖放光标位置。");
+                    if(diagnosticId is {} id)DragDiagnostics.Stage(id,$"ole-helper cursor=({cursor.X},{cursor.Y})");
                     window.Location=new Point(cursor.X-3,cursor.Y-3);
                     MouseEventHandler? begin=null;
                     begin=(_,args)=>
                     {
                         if(args.Button!=MouseButtons.Left)return;
+                        if(diagnosticId is {} pressId)DragDiagnostics.Cursor(pressId,"ole-helper-mousedown");
                         SafeLog("拖放阶段：辅助窗口收到原生按下。");
                         window.MouseDown-=begin;
                         try
                         {
-                            lock(current)current.Window=window.Handle;
+                            if(current.Cancelled||!current.Down){nativeDone.TrySetCanceled();return;}
+                            current.Window=window;
                             current.Started=started;
                             // The helper only establishes a native mouse-down queue.
                             // Hide it before OLE hit-testing; waiting for feedback to hide
@@ -174,7 +186,9 @@ public sealed class NativeDragBridge : IDisposable
                             window.Hide();
                             // OLE waits for real mouse input before its first feedback;
                             // posting WM_MOUSEMOVE to this helper does not wake its capture window.
-                            using var wake=new System.Threading.Timer(_=>Wake(current),null,30,Timeout.Infinite);
+                            using var wake=new System.Windows.Forms.Timer{Interval=30};
+                            wake.Tick+=(_,_)=>{wake.Stop();Wake(current);};
+                            wake.Start();
                             int hr=OleNative.DoDragDrop(data,current,1,out uint effect);
                             ReleaseNativeButton(current);
                             if(current.Failure!=null)throw new IOException("原生拖放输入失败。",current.Failure);
@@ -187,31 +201,38 @@ public sealed class NativeDragBridge : IDisposable
                         catch(Exception ex){nativeDone.TrySetException(ex);}
                         finally
                         {
-                            lock(current){current.Window=IntPtr.Zero;ReleaseNativeButton(current);}
+                            current.Window=null;
+                            ReleaseNativeButton(current);
                             window.Hide();GC.KeepAlive(data);
                         }
                     };
                     window.MouseDown+=begin;
                     current.RemoveStart=()=>window.MouseDown-=begin;
                     window.Show();
-                    NativeMethods.MoveCursor(cursor.X,cursor.Y);
-                    var startTimer=new System.Windows.Forms.Timer{Interval=100};
-                    startTimer.Tick+=(_,_)=>
+                    // Verify the helper is topmost and hit-testable on the
+                    // next dispatch turn; never click through it on failure.
+                    window.BeginInvoke(new Action(()=>
                     {
-                        startTimer.Stop();startTimer.Dispose();
                         if(current.Cancelled||!current.Down){nativeDone.TrySetCanceled();return;}
                         try
                         {
+                            if(!NativeMethods.GetCursorPos(out var latest))throw new IOException("无法取得拖放光标位置。");
+                            // Input keeps flowing during startup. Follow its latest
+                            // position instead of clicking at the stale entry point.
+                            if(!SetWindowPos(window.Handle,new IntPtr(-1),latest.X-3,latest.Y-3,0,0,0x0011)) // no size or activation
+                                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
                             if(!NativeMethods.GetCursorPos(out var position)||WindowFromPoint(position)!=window.Handle)
+                            {
+                                if(diagnosticId is {} startId)DragDiagnostics.Cursor(startId,$"ole-helper-miss requested=({latest.X},{latest.Y})");
                                 throw new IOException("拖放辅助窗口未取得鼠标位置，请重试拖放。");
+                            }
                             Interlocked.Exchange(ref current.NativeButtonDown,1);
                             NativeMethods.InjectMouse(0,0,2);
+                            if(diagnosticId is {} injectId)DragDiagnostics.Cursor(injectId,"ole-press-injected");
                             SafeLog("拖放阶段：已注入原生启动按下。");
                         }
                         catch(Exception ex){nativeDone.TrySetException(ex);}
-                    };
-                    current.RemoveStart=()=>{startTimer.Stop();startTimer.Dispose();window.MouseDown-=begin;};
-                    startTimer.Start();
+                    }));
                 }).ConfigureAwait(false);
                 try{await nativeDone.Task.WaitAsync(stop.Token).ConfigureAwait(false);}
                 finally
@@ -223,14 +244,14 @@ public sealed class NativeDragBridge : IDisposable
                     }
                     catch(TimeoutException ex)
                     {
-                        current.Cancelled=true;Wake(current);
+                        current.Cancelled=true;RequestWake(current);
                         lock(gate)apartmentFailure=ex; // Never reuse a still-running OLE session.
                         throw new IOException("原生拖放取消超时，请重启应用后重试。",ex);
                     }
                 }
                 if(current.Failure!=null)throw new IOException("原生拖放输入失败。",current.Failure);
             }
-            finally { if (!started.Task.IsCompletedSuccessfully) data.Abort(); }
+            finally { if (!started.Task.IsCompletedSuccessfully) remoteData?.Abort(); }
         }
         catch (Exception ex)
         {
@@ -246,21 +267,34 @@ public sealed class NativeDragBridge : IDisposable
             current.Stop.Dispose();
         }
     }
+    internal static DataObject CreateLocalDropData(IReadOnlyList<string> paths)
+    {
+        var files = new System.Collections.Specialized.StringCollection();
+        foreach (string path in paths)
+        {
+            if (!Path.IsPathFullyQualified(path) || (!File.Exists(path) && !Directory.Exists(path)))
+                throw new IOException("源文件已不可访问，无法继续拖放。");
+            files.Add(path);
+        }
+        var data = new DataObject();
+        data.SetFileDropList(files);
+        return data;
+    }
     public void UpdateRemoteButton(bool isDown)
     {
-        lock (gate) { if (session != null && !isDown) { session.Down = false; Wake(session); } }
+        lock (gate) { if (session != null && !isDown) { session.Down = false; RequestWake(session); } }
     }
     public void CancelRemoteDrag()
     {
-        lock (gate) { if (session != null) { session.Cancelled = true; session.Stop.Cancel(); Wake(session); } }
+        lock (gate) { if (session != null) { session.Cancelled = true; session.Stop.Cancel(); } }
     }
+    [DllImport("user32.dll",SetLastError=true)] private static extern bool SetWindowPos(IntPtr window,IntPtr after,int x,int y,int width,int height,uint flags);
     [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(NativeMethods.Point point);
     private static void RecordInputFailure(DragSession current,Exception error)
     {
         Interlocked.CompareExchange(ref current.Failure,error,null);
         current.Cancelled=true;
-        IntPtr window=current.Window;
-        if(window!=IntPtr.Zero)OleNative.PostMessage(window,0x1F,IntPtr.Zero,IntPtr.Zero); // WM_CANCELMODE releases OLE capture without SendInput.
+        if(current.Window is {} window)OleNative.PostMessage(window.Handle,0x1F,IntPtr.Zero,IntPtr.Zero); // WM_CANCELMODE releases OLE capture without SendInput.
     }
     private static void ReleaseNativeButton(DragSession current)
     {
@@ -270,29 +304,41 @@ public sealed class NativeDragBridge : IDisposable
         try{NativeMethods.InjectMouse(0,0,4);}
         catch(Exception ex){RecordInputFailure(current,ex);}
     }
+    private void RequestWake(DragSession current)
+    {
+        // May be called by a low-level hook under InputRouter's lock. Never
+        // inject or wait here: SendInput can wait for that very hook to return.
+        if(current.Window is not {} window)return;
+        try{window.BeginInvoke(new Action(()=>Wake(current)));}
+        catch(InvalidOperationException ex){SafeLog("无法调度原生拖放释放："+ex.Message);}
+    }
     private static void Wake(DragSession current)
     {
-        lock(current)
+        // Run only on the OLE STA, including the startup timer. A queued
+        // callback for a completed session must not touch the new session.
+        if(current.Window==null)return;
+        if(current.Cancelled||!current.Down)
         {
-            if(current.Window==IntPtr.Zero)return;
-            if(current.Cancelled||!current.Down)ReleaseNativeButton(current);
-            try
-            {
-                if(NativeMethods.GetCursorPos(out var point))
-                {
-                    Rectangle screen=Screen.FromPoint(new Point(point.X,point.Y)).Bounds;
-                    NativeMethods.MoveCursor(point.X < screen.Right-1 ? point.X+1 : point.X-1,point.Y);
-                }
-            }
-            catch(Exception ex){RecordInputFailure(current,ex);}
+            ReleaseNativeButton(current);
+            return;
         }
+        if(current.Started?.Task.IsCompletedSuccessfully==true)return;
+        try
+        {
+            if(NativeMethods.GetCursorPos(out var point))
+            {
+                Rectangle screen=Screen.FromPoint(new Point(point.X,point.Y)).Bounds;
+                NativeMethods.MoveCursor(point.X < screen.Right-1 ? point.X+1 : point.X-1,point.Y);
+            }
+        }
+        catch(Exception ex){RecordInputFailure(current,ex);}
     }
     public void Dispose()
     {
         lock (gate)
         {
             if (disposed) return; disposed = true;
-            if (session != null) { session.Cancelled = true; Wake(session); }
+            if (session != null) { session.Cancelled = true; RequestWake(session); }
             lifetime.Cancel();
             foreach (WeakReference<VirtualFileDataObject> weak in objects) if (weak.TryGetTarget(out VirtualFileDataObject? data)) data.Abort();
             foreach (WeakReference<RemoteFileCache> weak in caches) if (weak.TryGetTarget(out RemoteFileCache? cache)) cache.Dispose();
@@ -313,7 +359,7 @@ public sealed class NativeDragBridge : IDisposable
         internal volatile bool Down = true, Cancelled;
         internal Exception? Failure;
         internal int NativeButtonDown;
-        internal IntPtr Window;
+        internal volatile HelperWindow? Window;
         internal TaskCompletionSource? Started;
         internal Action? RemoveStart;
         internal bool DropRequested;
