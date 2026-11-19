@@ -15,6 +15,7 @@ public sealed class NativeDragBridge : IDisposable
 {
     private readonly BridgeNode node;
     private readonly Action<string> log;
+    private readonly Action<string> reportCopyFailure;
     private readonly object gate = new();
     private readonly TaskCompletionSource<HelperWindow> apartment = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly List<WeakReference<VirtualFileDataObject>> objects = new();
@@ -27,10 +28,11 @@ public sealed class NativeDragBridge : IDisposable
     private bool apartmentStarted;
     internal static bool SystemLeftDown => (NativeMethods.GetAsyncKeyState(1) & 0x8000) != 0;
 
-    public NativeDragBridge(BridgeNode node, Action<string> log)
+    public NativeDragBridge(BridgeNode node, Action<string> log, Action<string>? reportCopyFailure = null)
     {
         this.node = node ?? throw new ArgumentNullException(nameof(node));
         this.log = log ?? throw new ArgumentNullException(nameof(log));
+        this.reportCopyFailure = reportCopyFailure ?? log;
     }
     private void RunApartment()
     {
@@ -47,6 +49,7 @@ public sealed class NativeDragBridge : IDisposable
         finally { OleNative.OleUninitialize(); }
     }
     private void SafeLog(string message) { try { log(message); } catch { /* Logging must not unwind OLE callbacks. */ } }
+    private void ReportCopyFailure(string message) { try { reportCopyFailure(message); } catch { /* Do not unwind the Shell callback. */ } }
     private async Task InvokeAsync(Action<HelperWindow> action,bool shuttingDown=false)
     {
         lock(gate)
@@ -143,7 +146,7 @@ public sealed class NativeDragBridge : IDisposable
                 stop.Token.ThrowIfCancellationRequested();
                 if (!current.Down) return;
                 var cache = new RemoteFileCache(node, sourcePeer, offerId, SafeLog);
-                try { remoteData = new VirtualFileDataObject(offer, cache, SafeLog); }
+                try { remoteData = new VirtualFileDataObject(offer, cache, ReportCopyFailure); }
                 catch { cache.Dispose(); throw; }
                 lock (gate)
                 {

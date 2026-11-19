@@ -17,13 +17,13 @@ internal sealed class VirtualFileDataObject : IDataObject, IDataObjectAsyncCapab
     private static readonly short PreferredEffect = unchecked((short)OleNative.RegisterClipboardFormat("Preferred DropEffect"));
     private readonly FileEntry[] entries;
     private readonly RemoteFileCache cache;
-    private readonly Action<string> log;
+    private readonly Action<string> reportCopyFailure;
     private readonly object gate = new();
     private bool asynchronous = true;
     private GCHandle operation;
-    internal VirtualFileDataObject(FileOffer offer, RemoteFileCache cache, Action<string> log)
+    internal VirtualFileDataObject(FileOffer offer, RemoteFileCache cache, Action<string> reportCopyFailure)
     {
-        this.cache = cache; this.log = log; entries = offer.Entries.ToArray();
+        this.cache = cache; this.reportCopyFailure = reportCopyFailure; entries = offer.Entries.ToArray();
         if (entries.Length == 0 || entries.Length > 100000) throw new InvalidDataException("Invalid file offer item count.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var indices = new HashSet<int>();
@@ -111,7 +111,7 @@ internal sealed class VirtualFileDataObject : IDataObject, IDataObjectAsyncCapab
     public int EndOperation(int result, IBindCtx? context, uint effects)
     {
         lock (gate) { if (operation.IsAllocated) operation.Free(); }
-        if (result < 0) log("目标程序异步提取文件失败：0x" + result.ToString("X8"));
+        if (result < 0) reportCopyFailure("目标程序异步提取文件失败：0x" + result.ToString("X8"));
         return 0;
     }
     internal void Abort() { lock (gate) { if (operation.IsAllocated) operation.Free(); } cache.Dispose(); }

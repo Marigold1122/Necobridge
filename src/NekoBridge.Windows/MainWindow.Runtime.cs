@@ -71,7 +71,6 @@ public partial class MainWindow : Window
     }
     private bool _initialized,_quitting,_busyCrossing,_uiReady,_started;
     private string? _startupError;
-    private long? _lastWarningAt;
     private Guid _screenDrag;
     private Guid _logicalSource;
     private Guid _logicalOffer;
@@ -89,7 +88,7 @@ public partial class MainWindow : Window
         _node=new BridgeNode(_state.Settings,_state.Identity,_state.Save);
         _router=new InputRouter(_node,Log);
         _node.LocalDevice=new DeviceDescriptor(_state.Settings.Id,_state.Settings.DeviceName,_router.Width,_router.Height);
-        _drag=new NativeDragBridge(_node,Log);
+        _drag=new NativeDragBridge(_node,LogOnly,ShowOperationStatus);
         _clipboard=new ClipboardSync(_node,()=>_state.Settings.ClipboardEnabled,Log,Dispatcher,()=>_state.Settings.ClipboardHistoryEnabled);
         _historyStore=new HistoryStore(Path.Combine(_state.DirectoryPath,"ClipboardHistory"),new HistoryRetention(_state.Settings.ClipboardHistoryMaxItems,_state.Settings.ClipboardHistoryDays,_state.Settings.ClipboardHistoryMaxBytes));
         _historyBridge=new HistoryBridge(_clipboard,_historyStore,_node,Log,kind=>_state.Settings.ClipboardHistoryEnabled&&(kind switch {"image"=>_state.Settings.ClipboardHistoryCaptureImages,"files"=>_state.Settings.ClipboardHistoryCaptureFiles,_=>true}));
@@ -186,21 +185,14 @@ public partial class MainWindow : Window
         if(Dispatcher.HasShutdownStarted)return;
         Dispatcher.BeginInvoke(action,DispatcherPriority.Normal);
     }
-    private void Log(string message)=>UI(()=>
+    private void Log(string message)=>WriteLog(message,message.Contains("失败")||message.Contains("拒绝")||message.Contains("取消"));
+    private void LogOnly(string message)=>WriteLog(message,false);
+    private void ShowOperationStatus(string message)=>WriteLog(message,true);
+    private void WriteLog(string message,bool showStatus)=>UI(()=>
     {
         _logs.Insert(0,$"{DateTime.Now:HH:mm:ss}  {message}");
         while(_logs.Count>200)_logs.RemoveAt(_logs.Count-1);
-        bool failed=message.Contains("失败")||message.Contains("拒绝");
-        if(failed||message.Contains("取消"))
-        {
-            TransferText.Text=message;TransferText.ToolTip=message;
-            long now=Environment.TickCount64;
-            if(failed&&(_lastWarningAt is null||now-_lastWarningAt.Value>=30000))
-            {
-                _lastWarningAt=now;
-                _tray.ShowBalloonTip(5000,"NekoBridge",message,Forms.ToolTipIcon.Warning);
-            }
-        }
+        if(showStatus){TransferText.Text=message;TransferText.ToolTip=message;}
     });
     private string NameOf(Guid id)=>id==_node.LocalId?_state.Settings.DeviceName:_node.Peers.FirstOrDefault(p=>p.Id==id)?.DisplayName??"未知设备";
     private string LocalAddresses()
@@ -343,9 +335,9 @@ public partial class MainWindow : Window
                         }
                         catch(Exception ex)
                         {
-                            Log($"源端交接失败：{ex.Message}");
+                            LogOnly($"源端交接失败：{ex.Message}");
                             AbortSourceCapture();
-                            SendObserved(peer,new ControlMessage{Kind="released2",Id=m.Id,Flags=1,Text="源端未能交接拖放，请检查源端提示。"});
+                            SendObserved(peer,new ControlMessage{Kind="released2",Id=m.Id,Flags=1,Text="源端未能交接拖放。"});
                         }
                     }
                     break;
@@ -359,7 +351,7 @@ public partial class MainWindow : Window
                     AbortSourceCapture();
                     break;
                 case "capture":case "dragoffer":case "dragcancel":
-                    Log("跨屏拖放已拒绝：请更新两端版本。");break;
+                    ShowOperationStatus("跨屏拖放已拒绝：请更新两端版本。");break;
                 case "manualoffer":
                     await _node.SendAsync(peer,new ControlMessage{Kind="manualdone",Id=m.Id},_lifetime.Token);
                     Log("已拒绝旧版手动发送请求；请使用桌面或资源管理器跨屏拖放。");break;
@@ -488,8 +480,8 @@ public partial class MainWindow : Window
             _currentDragTarget=to;_targetSession=id;success=true;
             if(!_router.LeftDown){ClearLogicalDrag();}
         }
-        catch(OperationCanceledException){if(!_quitting)Log("跨屏拖放已取消：按钮已松开或控制会话已改变。");}
-        catch(Exception ex){DragDiagnostics.Failure("cross-edge",ex,id);Log($"跨屏拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");}
+        catch(OperationCanceledException){if(!_quitting)LogOnly("跨屏拖放已取消：按钮已松开或控制会话已改变。");}
+        catch(Exception ex){DragDiagnostics.Failure("cross-edge",ex,id);if(!_quitting)ShowOperationStatus($"跨屏拖放失败：{ex.Message}");}
         finally
         {
             if(left&&!success)
@@ -538,8 +530,8 @@ public partial class MainWindow : Window
             if(offer!=null)_node.RevokeOffer(offer.Id);
             if(_sourceCapture.Session==request.Id){_sourceCapture=default;_sourceCapturePaths=null;}
             DragDiagnostics.Failure("source-capture",ex);
-            Log($"源端拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");
-            SendObserved(peer,new ControlMessage{Kind="captured2",Id=request.Id,Flags=1,Text="源端未能准备文件，请检查源端提示。"});
+            LogOnly($"源端拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");
+            SendObserved(peer,new ControlMessage{Kind="captured2",Id=request.Id,Flags=1,Text="源端未能准备文件，请检查文件是否仍可访问。"});
         }
         finally{_sourceCaptureStop=null;}
     }
@@ -587,7 +579,13 @@ public partial class MainWindow : Window
             finally{await operation;}
         }
         catch(OperationCanceledException){}
-        catch(Exception ex){DragDiagnostics.Failure("native-target",ex,incoming.Id);Log($"原生拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");}
+        catch(Exception ex)
+        {
+            DragDiagnostics.Failure("native-target",ex,incoming.Id);
+            if(!_quitting&&incoming.Started.Task.IsCompletedSuccessfully&&!incoming.Stop.IsCancellationRequested)
+                ShowOperationStatus($"原生拖放失败：{ex.Message}");
+            else LogOnly($"原生拖放失败 [0x{ex.HResult:X8}]：{ex.Message}");
+        }
         finally
         {
             incoming.Ready.TrySetCanceled();incoming.Started.TrySetCanceled();
@@ -635,7 +633,7 @@ public partial class MainWindow : Window
         }
         catch(OperationCanceledException) when(_quitting||incoming?.CancelReason!=null)
         {
-            Log("目标端拖放已取消："+(incoming?.CancelReason??"程序退出"));
+            LogOnly("目标端拖放已取消："+(incoming?.CancelReason??"程序退出"));
         }
         catch(Exception ex)
         {
@@ -643,9 +641,9 @@ public partial class MainWindow : Window
             var failure=ex is OperationCanceledException
                 ?new OperationCanceledException("目标拖放在启动确认前已结束；请保持左键按住到跨屏完成。",ex):ex;
             DragDiagnostics.Failure(ready?"target-start":"target-prepare",failure,m.Id);
-            Log($"目标端拖放失败 [0x{failure.HResult:X8}]：{failure.Message}");
-            string text=ready?(failure.InnerException is TimeoutException?"目标端原生拖放启动超时。":"目标端未能启动原生拖放，请查看目标端提示。")
-                :"目标端未能准备原生拖放，请查看目标端提示。";
+            LogOnly($"目标端拖放失败 [0x{failure.HResult:X8}]：{failure.Message}");
+            string text=ready?(failure.InnerException is TimeoutException?"目标端原生拖放启动超时。":"目标端未能启动原生拖放。")
+                :"目标端未能准备原生拖放。";
             SendObserved(peer,new ControlMessage{Kind=ready?"started2":"dragready",Id=m.Id,Flags=1,Text=text});
         }
     }
